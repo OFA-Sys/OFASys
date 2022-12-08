@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://ofasys.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/ofasys/badge/?version=latest"/></a>
+</p>
+
 # What is OFASys?
 
 <img src="images/task7.gif" width = "700" alt="" align=center />
@@ -51,4 +55,4 @@ python setup.py develop
 
 # Getting Started
 
-The [documents](ofasys.readthedocs.io/start/quickstart.html) contains more instructions for getting started.
+The [documents](https://ofasys.readthedocs.io/en/latest/start/quickstart.html) contains more instructions for getting started.
