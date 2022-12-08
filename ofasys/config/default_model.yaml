@@ -1,0 +1,23 @@
+arch: tiny
+encoder:
+    normalize_before: true
+    learned_pos: true
+decoder:
+    normalize_before: true
+    learned_pos: true
+max_source_positions: 1024
+max_target_positions: 1024
+share_decoder_input_output_embed: true
+share_all_embeddings: true
+no_scale_embedding: true
+layernorm_embedding: true
+activation_fn: gelu
+dropout: 0.1
+attention_dropout: 0.0
+
+encode_drop_path_rate: 0.0
+decode_drop_path_rate: 0.0
+
+freeze_encoder_embedding: false
+freeze_decoder_embedding: false
+use_fused: false

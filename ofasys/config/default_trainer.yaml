@@ -1,0 +1,28 @@
+defaults:
+    - trainer
+    - optimizer: adam
+    - lr_scheduler: ofa_polynomial_decay
+    - _self_
+
+common:
+    fp16: true
+    fp16_scale_window: 512
+    log_format: simple
+    log_interval: 1
+
+distributed_training:
+    find_unused_parameters: true
+
+optimization:
+    max_update: 10000
+    clip_norm: 1.0
+    lr: [1e-5]
+    sentence_avg: false
+
+optimizer:
+    adam_betas: [0.9, 0.999]
+    adam_eps: 1e-08
+    weight_decay: 0.01
+
+lr_scheduler:
+    warmup_ratio: 0.06

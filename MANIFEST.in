@@ -1,0 +1,4 @@
+include ofasys/module/fused_kernels/*.h
+include ofasys/module/fused_kernels/*.cpp
+include ofasys/module/fused_kernels/*.cuda
+include ofasys/config/*.yaml
