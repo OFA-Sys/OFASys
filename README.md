@@ -118,8 +118,7 @@ model = OFASys.from_pretrained('multitask.pt')
 
 OFASys enables multi-task multi-modal inference through the instruction alone. Let's go through a couple of examples!
     
-<details>
-<summary><b>Image Captioning</b></summary>
+### Image Captioning
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/data/coco/2014/val2014/COCO_val2014_000000222628.jpg" width="400">
 
 ```python
@@ -130,10 +129,7 @@ print(output.text)
 # "a man and woman sitting in front of a laptop computer"
 ```
 
-</details>
-
-<details>
-<summary><b>Visual Grounding</b></summary>
+### Visual Grounding
 <img src="https://www.2008php.com/2014_Website_appreciate/2015-06-22/20150622131649.jpg" width="400">
 
 ```python
@@ -142,13 +138,9 @@ data = {'img': "https://www.2008php.com/2014_Website_appreciate/2015-06-22/20150
 output = model.inference(instruction, data=data)
 output.save_box("output.jpg")
 ```
-
 <img src="http://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/inference_caption_0.jpg" width="400">
 
-</details>
-  
-<details>
-<summary><b>Text Summarization</b></summary>
+### Text Summarization
 
 ```python
 instruction = '<BOS> what is the summary of article " [TEXT:src] "? <EOS> -> <BOS> [TEXT:tgt] <EOS>'
@@ -159,10 +151,7 @@ print(output.text)
 # "polish opposition endorses walesa in presidential run-off"
 ```
 
-  </details>
-  
-<details>
-<summary><b>Table-to-Text Generation</b></summary>
+### Table-to-Text Generation
 
 ```python
 instruction = '<BOS> structured knowledge: " [STRUCT:database,uncased] "  . how to describe the tripleset ? <EOS> -> <BOS> [TEXT:tgt] <EOS>'
@@ -178,10 +167,8 @@ output = model.inference(instruction, data=data, beam_size=1)
 print(output.text)
 # "atlanta is the metropolitan area in the united states in 2012."
 ```
-  </details>
-  
-<details>
-<summary><b>Text-to-SQL Generation</b></summary>
+
+### Text-to-SQL Generation
 
 ```python
 instruction = '<BOS> " [TEXT:src] " ; structured knowledge: " [STRUCT:database,max_length=876] " . generating sql code. <EOS> -> <BOS> [TEXT:tgt] <EOS>'
@@ -203,11 +190,8 @@ print('\n'.join(o.text for o in output))]
 # "select distinct country from singer where age > 20"
 # "select location, name from stadium where capacity between 5000 and 10000"
 ``` 
-   
-  </details>
-  
-<details>
-<summary><b>Video Captioning</b></summary>
+
+### Video Captioning
   
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/video7021.gif" width="400">
 
@@ -218,11 +202,8 @@ output = model.inference(instruction, data=data)
 print(output.text)
 # "a baseball player is hitting a ball"
 ```
-  
-</details>
-  
-<details>
-<summary><b>Speech-to-Text Generation</b></summary>
+
+### Speech-to-Text Generation
 
 <audio controls="controls">
   <source src="http://ofasys.oss-cn-zhangjiakou.aliyuncs.com/data/librispeech/dev-clean/1272/128104/1272-128104-0001.flac" type="audio/wav">
@@ -237,10 +218,7 @@ print(output.text)
 # "nor is mister klohs manner less interesting than his manner"
 ```
 
-</details>
-  
-<details>
-<summary><b>Text-to-Image Generation</b></summary>
+### Text-to-Image Generation
 
 ```python   
 instruction = 'what is the complete image? caption: [TEXT:text]"? -> [IMAGE,preprocess=image_vqgan,adaptor=image_vqgan]'
@@ -250,5 +228,4 @@ output[0].save_image('0.png')
 ```
 
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/image-gen_example.png" width="400">
-</details>
   
