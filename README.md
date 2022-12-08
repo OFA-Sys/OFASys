@@ -18,7 +18,7 @@ OFASys is a multi-modal multi-task learning system designed to make multi-modal 
 # Requirements
 
 - PyTorch version >= 1.8.0
-- Python version >= 3.6
+- Python version >= 3.7
 - Torchaudio >= 0.8.0
 
 # Installation
