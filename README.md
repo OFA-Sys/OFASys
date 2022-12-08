@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://avatars.githubusercontent.com/u/98636793?s=200&v=4" width="150">
+  <img src="images/ofasys_logo.svg" >
   <br />
   <a href="https://ofasys.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/ofasys/badge/?version=latest"/></a>
 </p>
@@ -45,7 +45,7 @@ sudo apt-get update
 sudo apt-get install libsndfile1
 ```
 
-## Install with source (Optional)
+## Install with Source (Optional)
 
 Users can install OFASys from the source code to customize their training tasks and full functions.
 
@@ -61,7 +61,7 @@ The [documents](https://ofasys.readthedocs.io/en/latest/start/quickstart.html) c
 
 ## Training One Model for All Tasks
 
-### Define the tasks
+### Define the Tasks
 
 OFASys can co-train multiple multi-modal tasks flexibly.
 
@@ -92,7 +92,7 @@ task1.add_dataset(load_dataset('TheFusion21/PokemonCards')['train'], 'train')
 task2.add_dataset(load_dataset('glue', 'cola')['train'], 'train')
 ```
     
-### Create a Generalist Model and Train all Tasks Together
+### Create a Generalist Model and Train All Tasks Together
 
 The GeneralistModel of OFASys (OFA+) is capable of handling multiple [modalities](https://ofasys.readthedocs.io/en/latest/concept/plan.html#modality) including:
 *TEXT*, *IMAGE*, *AUDIO*, *VIDEO*, *MOTION*, *BOX*, *PHONE*.
@@ -107,7 +107,7 @@ trainer.fit(model=model, tasks=[task1, task2])
 
 The complete script is available at [scripts/trainer_api.py](https://github.com/OFA-Sys/OFASys/blob/main/scripts/trainer_api.py).
 
-## Infer multiple multi-modal tasks with One Checkpoint
+## Infer Multiple Multi-modal Tasks with One Checkpoint
 
 OFASys can infer multiple multi-modal tasks using just **One** checkpoint.
 
