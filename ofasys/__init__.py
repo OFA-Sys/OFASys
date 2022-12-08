@@ -8,12 +8,6 @@ import os
 import sys
 from enum import Enum, unique
 
-# Set stdout & stderr encoding to UTF-8
-if sys.stdout.encoding != 'UTF-8':
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
-if sys.stderr.encoding != 'UTF-8':
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
-
 
 # We need to setup root logger before importing any libraries.
 logging.basicConfig(
