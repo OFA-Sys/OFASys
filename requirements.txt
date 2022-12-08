@@ -1,0 +1,52 @@
+# framework
+torch
+torchvision
+torchaudio
+regex
+iopath
+oss2
+pyyaml
+tqdm
+cffi
+dataclasses; python_version<"3.7"
+numpy<1.20.0; python_version<"3.7"
+numpy>=1.19.0; python_version>="3.7"
+scipy
+dacite
+setuptools
+datasets
+einops
+hydra-core>=1.2
+omegaconf
+
+# nlp
+nltk
+sacrebleu==1.5.1
+ftfy # clip
+rouge_score==0.0.4
+
+# structure
+jsonlines
+sqlparse
+rapidfuzz
+
+# cv
+pillow
+opencv-python
+timm>=0.5.0
+http://ofasys.oss-cn-zhangjiakou.aliyuncs.com/dependency/clip-1.0-py3-none-any.whl
+matplotlib
+
+# audio
+inflect
+pypinyin
+g2p_en
+librosa
+soundfile
+editdistance
+
+# video
+av
+
+# motion
+transforms3d
