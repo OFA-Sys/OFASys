@@ -195,7 +195,7 @@ class GeneralistModel(FairseqEncoderDecoderModel):
                     - **inner_states** (List[Tensor]): all intermediate encoder hidden states
                       of shape ``(tgt_len, batch, embed_dim)``.
                     - **decoder_attentions** (List[Tensor]): attention weights of decoder's self attention of
-                      shape ``(num_heads, batch_size, tgt_len, tgt_len)'.
+                      shape ``(num_heads, batch_size, tgt_len, tgt_len)``.
                       Only return if *return_all_attention_weights* is True.
                     - **cross_attentions** (List[Tensor]): attention weights of decoder's self attention of
                       shape ``(num_heads, batch_size, src_len, tgt_len)``.
