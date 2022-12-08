@@ -5,9 +5,9 @@
 </p>
 
 # What is OFASys?
-
+<p align="center">
 <img src="images/task7.gif" width = "700" alt="" align=center />
-
+</p>
 OFASys is a multi-modal multi-task learning system designed to make multi-modal tasks declarative, modular and task-scalable. With OFASys, it is easy to:
 
 - Rapidly introduce new multi-modal tasks/datasets by defining a declarative one-line instruction.
