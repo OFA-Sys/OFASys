@@ -1,4 +1,6 @@
 <p align="center">
+  <img src="https://avatars.githubusercontent.com/u/98636793?s=200&v=4" width="150">
+  <br />
   <a href="https://ofasys.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/ofasys/badge/?version=latest"/></a>
 </p>
 
