@@ -81,7 +81,7 @@ OFASys can co-train multiple multi-modal tasks flexibly.
 In the simplest scenario, you only need to specify an instruction to define your task and a task name as an identifier.
 For more details about how to define a task for training, see [Define a Task](https://ofasys.readthedocs.io/en/latest/howto/add_task.html) and [Train a task](https://ofasys.readthedocs.io/en/latest/howto/train.html).
 
-###Set the Dataset
+### Set the Dataset
 
 The Task can use a regular Pytorch Dataloader which can be constructed by Huggingface Dataset or a customized Pytorch Dataset.
 
@@ -184,7 +184,7 @@ OFASys enables multi-task multi-modal inference through the instruction alone. L
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/video7021.gif" width="400">
 
     >>> instruction = '[VIDEO:video] <BOS> what does the video describe? <EOS> -> <BOS> [TEXT:cap] <EOS>'
-    >>> data = {'video': 'oss://ofasys/datasets/msrvtt_data/videos/video7021.mp4'}
+    >>> data = {'video': './video7021.mp4'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)
         # "a baseball player is hitting a ball"
@@ -197,7 +197,7 @@ OFASys enables multi-task multi-modal inference through the instruction alone. L
 </audio>
     
     >>> instruction = '[AUDIO:wav] <BOS> what is the text corresponding to the voice? <EOS> -> [TEXT:text,preprocess=text_phone,add_bos,add_eos]'
-    >>> data = {'wav': 'oss://ofasys/data/librispeech/dev-clean/1272/128104/1272-128104-0001.flac'}
+    >>> data = {'wav': './1272-128104-0001.flac'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)
         # "nor is mister klohs manner less interesting than his manner"
