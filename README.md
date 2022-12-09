@@ -10,6 +10,10 @@
 </a>
  <a href="https://github.com/OFA-Sys/OFASys/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"/></a>
 
+<p align="center">
+        <a href="modelscope.md">ModelScope</a>&nbsp ｜ &nbsp<a href="https://ofasys.readthedocs.io/en/latest/index.html">Documentation   </a>&nbsp| &nbsp<a href="https://arxiv.org/abs/2212.04408">Paper </a>&nbsp ｜ &nbspBlog
+</p>
+
 </p>
 
 # What is OFASys?
@@ -86,9 +90,7 @@ task2 = Task(
      micro_batch_size=2,
  )
 ```
-
 In the simplest scenario, you only need to specify an instruction to define your task and a task name as an identifier.
-For more details about how to define a task for training, see [Define a Task](https://ofasys-doc.readthedocs.io/en/latest/howto/add_task.html) and [Train a task](https://ofasys-doc.readthedocs.io/en/latest/howto/train.html).
 
 ### Set the Dataset
 
@@ -201,7 +203,7 @@ print('\n'.join(o.text for o in output))]
 
 ### Video Captioning
   
-<img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/video7021.gif" width="400">
+<img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/video.png" width="400">
 
 ```python
 instruction = '[VIDEO:video] <BOS> what does the video describe? <EOS> -> <BOS> [TEXT:cap] <EOS>'
@@ -237,3 +239,21 @@ output[0].save_image('0.png')
 
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/image-gen_example.png" width="400">
   
+  
+# Learn More
+
+| Section | Description |
+|-|-|
+| [Documentation](https://ofasys-doc.readthedocs.io/en/latest/index.html) | Full API documentation and tutorials |
+| [Quick tour](https://ofasys-doc.readthedocs.io/en/latest/start/quickstart.html) | Usage in 15 minutes, including training and inference|
+| [How to define a task](https://ofasys-doc.readthedocs.io/en/latest/howto/add_task.html) | How to define a task using the instruction |
+| [Task summary](https://ofasys-doc.readthedocs.io/en/latest/task/text.html) | Tasks supported by OFASys |
+
+
+# Getting Involved
+Feel free to submit Github issues or pull requests. Welcome to contribute to our project!
+
+To contact us, never hestitate to send an email to `jinze.bjz@alibaba-inc.com` or `menrui.mr@alibaba-inc.com`!
+<br></br>
+
+
