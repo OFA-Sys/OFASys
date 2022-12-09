@@ -1,6 +1,10 @@
 <p align="center">
-  <img src="images/ofasys_logo.svg" >
-  <br />
+  <br>
+    <img src="images/ofasys_logo.svg" width="250" />
+  <br>
+  
+   <br>
+  
   <a href='https://ofasys-doc.readthedocs.io/en/latest/?badge=latest'>
     <img src='https://readthedocs.org/projects/ofasys-doc/badge/?version=latest' alt='Documentation Status' />
 </a>
