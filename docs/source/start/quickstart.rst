@@ -183,7 +183,7 @@ Text-to-SQL Generation
     >>> data = [
     ...     {'src': 'What are the names, countries, and ages for every singer in descending order of age?', 'database': database},
     ...     {'src': 'What are all distinct countries where singers above age 20 are from?', 'database': database},
-    ...     {'src': 'What are the locations and names of all stations with capacity between 5000 and 10000?', 'database': database}
+    ...     {'src': 'Show the name and the release year of the song by the youngest singer.', 'database': database}
     ... ]
     >>> output = model.inference(instruction, data=data)
     >>> print('\n'.join(o.text for o in output))
@@ -192,7 +192,7 @@ Text-to-SQL Generation
 
     "select name, country, age from singer order by age desc"
     "select distinct country from singer where age > 20"
-    "select location, name from stadium where capacity between 5000 and 10000"
+    "select song_name, song_release_year from singer order by age limit 1"
 
 Video Captioning
 ------------------

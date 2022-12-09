@@ -9,7 +9,7 @@ Requirements
 - Python version >= 3.7
 - Torchaudio >= 0.8.0
 
-First, we need a ``python`` environment whose version is at least greater than ``3.7.0``.
+First, we need a ``python`` environment whose version is at least ``3.7.0``.
 If you don't have one, please refer to the `documentation <https://docs.anaconda.com/anaconda/install/>`_ to install and configure the Anaconda environment.
 
 .. code-block::
