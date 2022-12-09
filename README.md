@@ -256,4 +256,35 @@ Feel free to submit Github issues or pull requests. Welcome to contribute to our
 To contact us, never hestitate to send an email to `jinze.bjz@alibaba-inc.com` or `menrui.mr@alibaba-inc.com`!
 <br></br>
 
+# Citation
+
+Please cite our [paper](https://arxiv.org/abs/2212.04408) if you find it helpful :)
+
+```
+@article{bai2022ofasys,
+  author    = {
+      Jinze Bai and 
+      Rui Men and 
+      Hao Yang and 
+      Xuancheng Ren and 
+      Kai Dang and 
+      Yichang Zhang and 
+      Xiaohuan Zhou and 
+      Peng Wang and 
+      Sinan Tan and 
+      An Yang and 
+      Zeyu Cui and 
+      Yu Han and 
+      Shuai Bai and 
+      Wenbin Ge and 
+      Jianxin Ma and 
+      Junyang Lin and 
+      Jingren Zhou and 
+      Chang Zhou},
+  title     = {OFASys: A Multi-Modal Multi-Task Learning System for Building Generalist Models},
+  journal   = {CoRR},
+  volume    = {abs/2212.04408},
+  year      = {2022}
+}
+```
 
