@@ -1,7 +1,11 @@
 <p align="center">
   <img src="images/ofasys_logo.svg" >
   <br />
-  <a href="https://ofasys.readthedocs.io/en/latest/?badge=latest"><img alt="Documentation Status" src="https://readthedocs.org/projects/ofasys/badge/?version=latest"/></a>
+  <a href='https://ofasys-doc.readthedocs.io/en/latest/?badge=latest'>
+    <img src='https://readthedocs.org/projects/ofasys-doc/badge/?version=latest' alt='Documentation Status' />
+</a>
+ <a href="https://github.com/OFA-Sys/OFASys/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"/></a>
+
 </p>
 
 # What is OFASys?
@@ -57,7 +61,7 @@ python setup.py develop
 
 # Getting Started
 
-The [documents](https://ofasys.readthedocs.io/en/latest/start/quickstart.html) contains more instructions for getting started.
+The [documents](https://ofasys-doc.readthedocs.io/en/latest/start/quickstart.html) contains more instructions for getting started.
 
 ## Training One Model for All Tasks
 
@@ -80,7 +84,7 @@ task2 = Task(
 ```
 
 In the simplest scenario, you only need to specify an instruction to define your task and a task name as an identifier.
-For more details about how to define a task for training, see [Define a Task](https://ofasys.readthedocs.io/en/latest/howto/add_task.html) and [Train a task](https://ofasys.readthedocs.io/en/latest/howto/train.html).
+For more details about how to define a task for training, see [Define a Task](https://ofasys-doc.readthedocs.io/en/latest/howto/add_task.html) and [Train a task](https://ofasys-doc.readthedocs.io/en/latest/howto/train.html).
 
 ### Set the Dataset
 
@@ -94,7 +98,7 @@ task2.add_dataset(load_dataset('glue', 'cola')['train'], 'train')
     
 ### Create a Generalist Model and Train All Tasks Together
 
-The GeneralistModel of OFASys (OFA+) is capable of handling multiple [modalities](https://ofasys.readthedocs.io/en/latest/concept/plan.html#modality) including:
+The GeneralistModel of OFASys (OFA+) is capable of handling multiple [modalities](https://ofasys-doc.readthedocs.io/en/latest/concept/plan.html#modality) including:
 *TEXT*, *IMAGE*, *AUDIO*, *VIDEO*, *MOTION*, *BOX*, *PHONE*.
 
 The OFASys Trainer “mixes” multiple Tasks with any dataset and abstracts away all the engineering complexity needed for scale.
