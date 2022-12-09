@@ -11,7 +11,7 @@
  <a href="https://github.com/OFA-Sys/OFASys/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"/></a>
 
 <p align="center">
-         &nbsp<a href="https://ofasys.readthedocs.io/en/latest/index.html">Documentation </a>&nbsp| &nbsp<a href="https://arxiv.org/abs/2212.04408">Paper</a>&nbsp｜&nbsp Blog &nbsp |&nbsp <a href="modelscope.md">ModelScope</a>&nbsp 
+         &nbsp<a href="https://ofasys-doc.readthedocs.io/en/latest/index.html">Documentation </a>&nbsp| &nbsp<a href="https://arxiv.org/abs/2212.04408">Paper</a>&nbsp｜&nbsp Blog &nbsp |&nbsp <a href="modelscope.md">ModelScope</a>&nbsp 
 </p>
 
 </p>
