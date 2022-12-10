@@ -11,7 +11,7 @@
  <a href="https://github.com/OFA-Sys/OFASys/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"/></a>
 
 <p align="center">
-         &nbsp<a href="https://ofasys-doc.readthedocs.io/en/latest/index.html">Documentation </a>&nbsp| &nbsp<a href="https://arxiv.org/abs/2212.04408">Paper</a>&nbsp｜&nbsp Blog &nbsp |&nbsp ModelScope &nbsp 
+         &nbsp<a href="https://ofasys-doc.readthedocs.io/en/latest/start/whatis.html">Documentation </a>&nbsp| &nbsp<a href="https://arxiv.org/abs/2212.04408">Paper</a>&nbsp｜&nbsp Blog &nbsp |&nbsp ModelScope &nbsp 
 </p>
 
 </p>
@@ -126,7 +126,7 @@ from ofasys import OFASys
 model = OFASys.from_pretrained('multitask.pt')
 ```
 
-OFASys enables multi-task multi-modal inference through the instruction alone. Let's go through a couple of examples!
+OFASys enables multi-task multi-modal inference through the instruction alone. The multitask checkpoint can be download at [here](http://ofasys.oss-cn-zhangjiakou.aliyuncs.com/model_hub/multitask_10k.pt). Let's go through a couple of examples!
     
 ### Image Captioning
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/data/coco/2014/val2014/COCO_val2014_000000222628.jpg" width="400">
