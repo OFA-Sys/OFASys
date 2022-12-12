@@ -35,6 +35,7 @@ Welcome to OFASys's documentation!
 
    task/text
    task/image
+   task/box
    task/video
    task/audio
    task/structural

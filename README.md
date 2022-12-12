@@ -26,6 +26,16 @@ OFASys is a multi-modal multi-task learning system designed to make multi-modal 
 - Develop new or reuse existing modality-specific components.
 - Jointly train multiple multi-modal tasks together without manual processing of multi-modal data collating.
 
+For now, OFASys supports 7 modalities and more than 20 classes of multi-modal tasks, including:
+2
+* Text, for tasks like Natural language Understanding, Text Summarization and Text Infilling.
+* Image: for tasks like Image Classification, Visual Entailment, Image Captioning, Visual Question Answering, Text-to-Image Generation and Image Infilling.
+* Box: for tasks like Visual Grounding, Grounded Caption, Object Detection
+* Video: for tasks like Video Classification, Video Captioning and Video Question Answering.
+* Audio: for tasks like Automatic Speech Recognition, and Text to Speech.
+* Structural Language: for tasks like Text-to-SQL, Table-to-Text, Table question answering, and Sudoku.
+* Motion: for tasks like Text-to-Motion.
+
 
 # Requirements
 
