@@ -204,7 +204,7 @@ data = [
      {'src': 'What are the locations and names of all stations with capacity between 5000 and 10000?', 'database': database}
  ]
 output = model.inference(instruction, data=data)
-print('\n'.join(o.text for o in output))]
+print('\n'.join([o.text for o in output]))
 # "select name, country, age from singer order by age desc"
 # "select distinct country from singer where age > 20"
 # "select location, name from stadium where capacity between 5000 and 10000"
