@@ -181,7 +181,7 @@ class SequenceGenerator(Generator):
             filter(lambda x: x.is_src and x.modality == ModalityType and not x.is_plaintext, net_input["slots"])
         )
         target_slot = Slot.get_target_slot_from_slots(net_input["slots"])
-        prefix_tokens: Optional[Tensor] = sample.get("prefix", None)
+        prefix_tokens: Optional[Tensor] = sample.get("prefix_tokens", None)
 
         if len(text_slots) == 1:
             src_tokens = text_slots[0].value
