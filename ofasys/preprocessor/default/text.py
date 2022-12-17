@@ -183,6 +183,9 @@ class DefaultTextPreprocess(SafeBasePreprocess):
             target = tokens.masked_fill(loss_mask, self.global_dict.pad())
             # prefix_tokens are used in inference
             prefix_tokens = tokens if no_loss and slot.split != 'train' else torch.LongTensor([])
+            # TODO: remove after merging eos and bos
+            prefix_tokens = torch.LongTensor([]) if len(tokens) == 1 and tokens[0] == self.global_dict.eos() else prefix_tokens
+
         else:
             target = None
             prefix_tokens = None
