@@ -141,11 +141,13 @@ def load_video(video: Union[str, 'av.container.InputContainer'], backend="pyav")
         if video.startswith("http://") or video.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to
             # use a local file like http_huggingface_co.png.
-            video = load_video_from_stream(requests.get(video, stream=True).raw)
+            video = load_video_from_stream(BytesIO(requests.get(video, stream=True).raw.read()))
         elif video.startswith("oss://"):
             fin = oss_get(video)
             video = load_video_from_stream(BytesIO(fin.read()))
             del fin
+        elif os.path.exists(video):
+            video = load_video_from_stream(BytesIO(open(video, 'rb').read()))
         else:
             image_bytes = base64decode(video)
             if image_bytes is not None:
