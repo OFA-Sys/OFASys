@@ -59,6 +59,8 @@ def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
             fin = oss_get(image)
             image = Image.open(BytesIO(fin.read()))
             del fin
+        elif os.path.exists(image):
+            image = Image.open(BytesIO(open(image, 'rb').read()))
         else:
             image_bytes = base64decode(image)
             if image_bytes is not None:
