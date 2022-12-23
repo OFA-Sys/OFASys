@@ -3,9 +3,11 @@
 # found in the LICENSE file in the root directory.
 
 from typing import Any, Dict
+import re
 
 from ofasys.configure import register_config
 from ofasys.task.base import OFATask, TaskConfig
+pattern = re.compile("\[table name\] (.+) \[table head\] (.+) \[table content\] (.+)")
 
 
 @register_config("ofasys.task", "fetaqa", dataclass=TaskConfig)
@@ -15,45 +17,46 @@ class FetaqaTask(OFATask):
         question = question.lower().replace('<unk>', 'unk')
         answer = answer.lower().replace('<unk>', 'unk')
 
-        seq2seq_dict = seq2seq_input(table, question, answer, self.cfg)
-        struct_in = seq2seq_dict["struct_in"]
-        text_in = seq2seq_dict["text_in"]
-        seq_out = seq2seq_dict["seq_out"]
-        data['src'] = text_in
-        data['database'] = struct_in
-        data['tgt'] = seq_out
+        table_name, table_head, table_content = pattern.findall(table)[0]
+        table_content = table_content.lower()
+        table_content = [[col for col in row.split(" : ")] for row in table_content.split(" | ")]
+        data['src'] = question.lower()
+        data['database'] = {
+            "table_name": table_name,
+            "table_head": table_head,
+            "table_content": table_content
+        }
+        data['tgt'] = answer.lower()
         # to unify bleu metric where references are more than one
-        data['ref_list'] = seq_out.split("&&")
+        data['ref_list'] = answer.lower().split("&&")
         return data
 
 
-def seq2seq_input(table, question, answer, args):
-    # if there need any process the let tripleset perfomed better write here
-    return {"struct_in": table, "text_in": question, "seq_out": answer}
-
-
 def preprocess_tsv(paths, data_dir):
-    import jsonlines
 
     def concat_tbl(rows):
-        seq = " [col] "
-        seq += " ".join(rows[0])
-
+        seq = " [table head] "
+        seq += " : ".join(rows[0])
+        seq += " [table content] "
         for i, row in enumerate(rows[1:]):
-            seq += " | [row"
-            seq += str(i)
-            seq += "] "
+            for idx, _row in enumerate(row):
+                if " : " in _row or " | " in _row:
+                    row[idx] = _row.replace(" : ", ":")
+                    row[idx] = _row.replace(" | ", "|")
             seq += " : ".join(row)
+            seq += " | "
         return seq
 
     for path in paths:
         rows = []
+        # jsonl_path = data_dir + path.split("/")[-1].split(".")[0].split("_")[1] + ".jsonl"
         jsonl_path = data_dir + path.split("/")[-1].split(".")[0].split("_")[1] + ".jsonl"
         with open(jsonl_path, encoding="utf-8") as f:
             for line in jsonlines.Reader(f):
                 question = line["question"]
                 answer = line["answer"]
-                table = line["table_page_title"] + " " + line["table_section_title"] + concat_tbl(line["table_array"])
+                table = f"[table name] {line['table_page_title']} {line['table_section_title']} {concat_tbl(line['table_array'])}"
+
                 rows.append([table, question, answer])
 
             print("FeTaQA data example: ", path)

@@ -37,14 +37,20 @@ class SudokuTask(OFATask):
         case_id, mask_ratio = data["uid"], data["mask_ratio"]
         if isinstance(mask_ratio, str):
             mask_ratio = float(mask_ratio)
-        src = src.lower().replace('<unk>', 'unk')
-        tgt = tgt.lower().replace('<unk>', 'unk')
 
-        input_puzzle = ' '.join(src.lower().strip().split())
-
-        output_ans = ' '.join(tgt.lower().strip().split())
+        input_puzzle = input_reformat(src)
+        output_ans = input_reformat(tgt)
 
         data['src'] = input_puzzle
         data['tgt'] = output_ans
         data["target_field"] = [mask_ratio, input_puzzle, output_ans]
         return data
+
+
+def input_reformat(input_puzzle):
+    input_puzzle = input_puzzle.lower().replace('<unk>', 'unk')
+    input_puzzle = ' '.join(input_puzzle.lower().strip().split())
+    list_puzzle = []
+    for row in input_puzzle.split(" | "):
+        list_puzzle.append([col for col in row.split(" : ")])
+    return list_puzzle

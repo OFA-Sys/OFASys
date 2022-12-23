@@ -34,10 +34,18 @@ class Dictionary:
         self.symbols = []
         self.count = []
         self.indices = {}
-        self.bos_index = self.add_symbol(bos, check=False)
-        self.pad_index = self.add_symbol(pad, check=False)
-        self.eos_index = self.add_symbol(eos, check=False)
-        self.unk_index = self.add_symbol(unk, check=False)
+        self.bos_index = None
+        self.pad_index = None
+        self.eos_index = None
+        self.unk_index = None
+        if bos is not None:
+            self.bos_index = self.add_symbol(bos, check=False)
+        if pad is not None:
+            self.pad_index = self.add_symbol(pad, check=False)
+        if eos is not None:
+            self.eos_index = self.add_symbol(eos, check=False)
+        if unk is not None:
+            self.unk_index = self.add_symbol(unk, check=False)
         if extra_special_symbols:
             for s in extra_special_symbols:
                 self.add_symbol(s, check=False)
@@ -356,7 +364,7 @@ class Dictionary:
             if add_if_not_exist:
                 idx = self.add_symbol(word)
             else:
-                idx = self.index(word)
+                idx = self.index('<text>_' + str(word))
             if consumer is not None:
                 consumer(word, idx)
             ids[i] = idx

@@ -54,6 +54,11 @@ def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itrs, val_loss, step=0
             trainer.state_dict()
         return
 
+    if os.path.exists(os.path.join(cfg.save_dir, "start_copy_local_to_oss")):
+        logger.warning('waiting for oss copying to finish')
+        while os.path.exists(os.path.join(cfg.save_dir, "start_copy_local_to_oss")):
+            time.sleep(1)
+
     write_timer = meters.StopwatchMeter()
     write_timer.start()
 
@@ -169,6 +174,10 @@ def save_checkpoint(cfg: CheckpointConfig, trainer, epoch_itrs, val_loss, step=0
                 os.remove(old_chk)
             elif PathManager.exists(old_chk):
                 PathManager.rm(old_chk)
+
+    with open(os.path.join(cfg.save_dir, "end_of_save_checkpoint"), "w") as fout:
+        assert not cfg.write_checkpoints_asynchronously
+        print("1", file=fout)
 
 
 def load_checkpoint(cfg: CheckpointConfig, trainer, **passthrough_args):

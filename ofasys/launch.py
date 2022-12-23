@@ -3,10 +3,13 @@
 # found in the LICENSE file in the root directory.
 
 import argparse
+import base64
 import codecs
 import copy
+import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from typing import Dict, List, Optional
@@ -270,7 +273,10 @@ if __name__ == "__main__":
 
     env = conf["env"]
     del conf["env"]
-    args = to_args(conf)
+    args = ['--ofasys_complete_config=' + base64.b64encode(json.dumps(conf).encode()).decode()]
+    if 'extra_models' in conf['model']:
+        del conf['model']['extra_models']
+    args += to_args(conf)
 
     bash_cmd = ""
     if env["runner"] == "local":

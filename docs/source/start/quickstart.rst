@@ -79,7 +79,7 @@ Image Captioning
 
 .. code:: python
 
-    >>> instruction = '[IMAGE:img] <BOS> what does the image describe? <EOS> -> <BOS> [TEXT:cap] <EOS>'
+    >>> instruction = '[IMAGE:img] what does the image describe? -> [TEXT:cap]'
     >>> data = {'img': "https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/data/coco/2014/val2014/COCO_val2014_000000222628.jpg"}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)
@@ -95,7 +95,7 @@ Visual Grounding
 
 .. code:: python
 
-    >>> instruction = '[IMAGE:img] <BOS> which region does the text " [TEXT:cap] " describe? <EOS> -> [BOX:patch_boxes,add_bos,add_eos]'
+    >>> instruction = '[IMAGE:img] which region does the text " [TEXT:cap] " describe? -> [BOX:patch_boxes]'
     >>> data = [
     ...     {'img': "https://www.2008php.com/2014_Website_appreciate/2015-06-22/20150622131649.jpg", 'cap': 'hand'},
     ...     {'img': "http://ofasys.oss-cn-zhangjiakou.aliyuncs.com/data/coco/2014/train2014/COCO_train2014_000000581563.jpg", 'cap': 'taxi'},
@@ -112,7 +112,7 @@ Text Summarization
 
 .. code:: python
 
-    >>> instruction = '<BOS> what is the summary of article " [TEXT:src] "? <EOS> -> <BOS> [TEXT:tgt] <EOS>'
+    >>> instruction = 'what is the summary of article " [TEXT:src] "? -> [TEXT:tgt]'
     >>> data = {'src': "poland 's main opposition party tuesday endorsed president lech walesa in an upcoming "
     ...        "presidential run-off election after a reformed communist won the first round of voting ."}
     >>> output = model.inference(instruction, data=data)
@@ -138,7 +138,7 @@ Table-to-Text Generation
 
 .. code:: python
 
-    >>> instruction = '<BOS> structured knowledge: " [STRUCT:database,uncased] "  . how to describe the tripleset ? <EOS> -> <BOS> [TEXT:tgt] <EOS>'
+    >>> instruction = 'structured knowledge: " [STRUCT:database,uncased] " . how to describe the tripleset ? -> [TEXT:tgt]'
     >>> data = {
     ...     'database': [['Atlanta', 'OFFICIAL_POPULATION', '5,457,831'],
     ...                  ['[TABLECONTEXT]', 'METROPOLITAN_AREA', 'Atlanta'],
@@ -152,7 +152,7 @@ Table-to-Text Generation
 
 ::
 
-   "atlanta is the metropolitan area in the united states in 2012."
+   "atlanta, united states has a population of 5,457,831 in 2012."
 
 Text-to-SQL Generation
 ---------------------------
@@ -172,7 +172,7 @@ Text-to-SQL Generation
 
 .. code:: python
 
-    >>> instruction = '<BOS> " [TEXT:src] " ; structured knowledge: " [STRUCT:database,max_length=876] " . generating sql code. <EOS> -> <BOS> [TEXT:tgt] <EOS>'
+    >>> instruction = '" [TEXT:src] " ; structured knowledge: " [STRUCT:database,max_length=876] " . generating sql code. -> [TEXT:tgt]'
     >>> database = [
     ...             ['concert_singer'],
     ...             ['stadium', 'stadium_id , location , name , capacity , highest , lowest , average'],
@@ -199,7 +199,7 @@ Video Captioning
 
 .. code:: python
 
-    >>> instruction = '[VIDEO:video] <BOS> what does the video describe? <EOS> -> <BOS> [TEXT:cap] <EOS>'
+    >>> instruction = '[VIDEO:video] what does the video describe? -> [TEXT:cap]'
     >>> data = {'video': 'oss://ofasys/datasets/msrvtt_data/videos/video7021.mp4'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)
@@ -215,7 +215,7 @@ Speech-to-Text Generation
 
 .. code:: python
 
-    >>> instruction = '[AUDIO:wav] <BOS> what is the text corresponding to the voice? <EOS> -> [TEXT:text,preprocess=text_phone,add_bos,add_eos]'
+    >>> instruction = '[AUDIO:wav] what is the text corresponding to the voice? -> [TEXT:text,preprocess=text_phone]'
     >>> data = {'wav': 'oss://ofasys/data/librispeech/dev-clean/1272/128104/1272-128104-0001.flac'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)

@@ -31,7 +31,7 @@ OFAAdaptorConfig = ConfigStore().make_dataclass(
     "ofasys.adaptor",
     "OFAAdaptorConfig",
     __name__,
-    ['text', 'image_resnet', 'image_vqgan', 'box'],
+    ['text', 'image_resnet', 'image_patch_embed', 'image_vqgan', 'box'],
 )
 default_adaptor = {
     ModalityType.TEXT: 'text',
@@ -42,6 +42,7 @@ default_adaptor = {
     ModalityType.VIDEO: 'video_image_sequence',
     ModalityType.MOTION: 'text',
     ModalityType.STRUCT: 'text',
+    ModalityType.CATEGORY: 'text',
 }
 
 
@@ -63,20 +64,23 @@ class OFAGeneralAdaptor(torch.nn.Module):
         self.embed_tokens = self.build_embedding(cfg, dictionary)
         self.cfg = cfg
         self.is_src = is_src
-        # parse adaptor's config from model's config
-        # by BaseAdaptorConfig.parse_from_model_cfg
+
         self.name2adaptor: Dict[str, BaseAdaptor] = {}
         for config_field in fields(cfg.adaptor):
             if config_field.name.startswith('_'):
                 continue
+            # TODO: activate adaptors according to encoder and decoder automatically
             if config_field.name == 'image_vqgan' and is_src:
                 continue
             if config_field.name == 'image_resnet' and not is_src:
+                continue
+            if config_field.name == 'video_image_sequence' and not is_src:
                 continue
             if config_field.name == 'image_vit' and not is_src:
                 continue
 
             config = getattr(cfg.adaptor, config_field.name)
+            # parse adaptor's config from model's config by BaseAdaptorConfig.parse_from_model_cfg
             config.parse_from_model_cfg(cfg)
             if config.is_active is False:
                 continue
@@ -129,11 +133,17 @@ class OFAGeneralAdaptor(torch.nn.Module):
         # numerical consistency with older versions
         modality_outputs = [None for _ in range(len(slots))]
         cnt = 0
+        modal_mask = [None for _ in range(len(slots))]
         for mod in ModalityType:
             for i, slot in enumerate(slots):
                 if slot.modality == mod:
                     adaptor = self.get_adaptor(slot)
                     modality_outputs[i] = adaptor(slot, **kwargs)
+                    #modal ffn
+                    if self.cfg.modal_ffn:
+                        modal_mask_item = torch.zeros_like(modality_outputs[i].masks, dtype=torch.int64)
+                        modal_mask_item = modal_mask_item + int(mod.value) - 1
+                        modal_mask[i] = modal_mask_item
                     cnt += 1
             if cnt == len(slots):
                 break
@@ -143,7 +153,9 @@ class OFAGeneralAdaptor(torch.nn.Module):
         #     modality_outputs.append(self.mod2adaptor[slot.modality](slot, **kwargs))
         output = self.concat(modality_outputs)
         # return output
-        return output.embed, output.masks, output.pos_embed, output.self_attn_bias
+        if self.cfg.modal_ffn:
+            modal_mask = torch.cat(modal_mask, dim=-1)
+        return output.embed, output.masks, output.pos_embed, output.self_attn_bias, modal_mask
 
     def forward_output(self, x: Tensor, extra: Dict[str, Any], slots: List[Slot], **kwargs):
         """

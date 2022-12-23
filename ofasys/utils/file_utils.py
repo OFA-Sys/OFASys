@@ -8,7 +8,6 @@ and `huggingface <https://github.com/huggingface>`_.
 # This source code is licensed under the Apache 2.0 license
 # found in the LICENSE file in the root directory.
 
-import fcntl
 import fnmatch
 import json
 import logging
@@ -22,6 +21,7 @@ from io import open
 from pathlib import Path
 
 import torch
+from datasets.utils.filelock import FileLock
 
 from .oss import oss_etag, oss_to_file
 
@@ -257,14 +257,9 @@ def local_file_lock(file_name):
     def lock_wrap(func):  # noqa
         @wraps(func)
         def wrapped_function(*args, **kwargs):
-            with open(file_name, 'wb') as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
-                try:
-                    ret = func(*args, **kwargs)
-                finally:
-                    fcntl.flock(lock, fcntl.LOCK_UN)
+            with FileLock(file_name) as lock:
+                ret = func(*args, **kwargs)
             return ret
-
         return wrapped_function
 
     return lock_wrap

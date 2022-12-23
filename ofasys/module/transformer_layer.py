@@ -2,14 +2,16 @@
 # This source code is licensed under the Apache 2.0 license
 # found in the LICENSE file in the root directory.
 
+import copy
 from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
 from torch import Tensor
 
+from ofasys import ModalityType
 from ofasys.module import utils
-
+from ofasys.module.sparse_dispatcher import SparseDispatcher
 from . import Dropout, DropPath, LayerNorm, MultiheadAttention, TransformerConfig
 
 
@@ -45,7 +47,11 @@ class TransformerEncoderLayer(nn.Module):
         self.normalize_before = cfg.encoder.normalize_before
         self.fc1 = nn.Linear(self.embed_dim, cfg.encoder.ffn_embed_dim)
         self.fc2 = nn.Linear(cfg.encoder.ffn_embed_dim, self.embed_dim)
-
+        if cfg.modal_ffn:
+            self.experts_num =  int(len(ModalityType))
+            self.experts_fc1 = nn.ModuleList([copy.deepcopy(self.fc1) for i in range(self.experts_num)])
+            self.experts_fc2 = nn.ModuleList([copy.deepcopy(self.fc2) for i in range(self.experts_num)])
+            self.gates_way = torch.eye(self.experts_num)
         self.attn_ln = LayerNorm(self.embed_dim) if cfg.scale_attn else None
         self.nh = self.self_attn.num_heads
         self.head_dim = self.self_attn.head_dim
@@ -99,7 +105,29 @@ class TransformerEncoderLayer(nn.Module):
         prefix = name + "." if name != "" else ""
         for param_name, param_tensor in self.state_dict().items():
             if (prefix + param_name) not in state_dict:
-                state_dict[prefix + param_name] = self.state_dict()[param_name]
+                for i in range(self.experts_num):
+                    if param_name.find("experts_fc1"+"."+str(i)) != -1:
+                        state_dict[prefix + param_name] = self.state_dict()[param_name.replace("experts_fc1"+"."+str(i), "fc1")]
+                    if param_name.find("experts_fc2"+"."+str(i)) != -1:
+                        state_dict[prefix + param_name] = self.state_dict()[param_name.replace("experts_fc2"+"."+str(i), "fc2")]
+                if param_name.find("experts_fc1") == -1 and param_name.find("experts_fc2") == -1:
+                    state_dict[prefix + param_name] = self.state_dict()[param_name]
+
+    def modal_for_ffn(self, modal_mask, x, experts_fc):
+        modal_mask_fc = modal_mask
+        bs, seq_len = modal_mask_fc.shape
+        modal_mask_fc = modal_mask_fc.view(bs * seq_len)
+        gates  = torch.index_select(self.gates_way.to(modal_mask_fc.device) , 0, modal_mask_fc)
+        gates = gates.view(bs * seq_len, self.experts_num)
+        dispatcher = SparseDispatcher(self.experts_num, gates)
+        seq_len, bs, dim = x.shape
+        x = x.view(seq_len * bs, dim)
+        expert_inputs = dispatcher.dispatch(x)
+        expert_outputs = [experts_fc[i](expert_inputs[i]) for i in range(self.experts_num)]
+        x = dispatcher.combine(expert_outputs)
+        x = x.view(seq_len, bs, -1)
+        x = x.half()
+        return x
 
     def forward(
         self,
@@ -108,6 +136,7 @@ class TransformerEncoderLayer(nn.Module):
         attn_mask: Optional[Tensor] = None,
         self_attn_bias: Optional[Tensor] = None,
         need_attn: bool = False,
+        modal_mask = None,
     ):
         """
         Args:
@@ -157,11 +186,20 @@ class TransformerEncoderLayer(nn.Module):
         residual = x
         if self.normalize_before:
             x = self.final_layer_norm(x)
-        x = self.activation_fn(self.fc1(x))
+        # ffn1 modal
+        if self.cfg.modal_ffn:
+            x = self.modal_for_ffn(modal_mask, x, self.experts_fc1)
+            x = self.activation_fn(x)
+        else:
+            x = self.activation_fn(self.fc1(x))
         x = self.activation_dropout_module(x)
         if self.ffn_layernorm is not None:
             x = self.ffn_layernorm(x)
-        x = self.fc2(x)
+        # ffn2 modal
+        if self.cfg.modal_ffn:
+            x = self.modal_for_ffn(modal_mask, x, self.experts_fc2)
+        else:
+            x = self.fc2(x)
         x = self.dropout_module(x)
         if self.w_resid is not None:
             residual = torch.mul(self.w_resid, residual)
@@ -200,6 +238,7 @@ class TransformerDecoderLayer(nn.Module):
         drop_path_rate=0.0,
     ):
         cfg = TransformerConfig.from_namespace(args)
+        self.cfg = cfg
         super().__init__()
         self.embed_dim = cfg.decoder.embed_dim
         self.dropout_module = Dropout(cfg.dropout, module_name=self.__class__.__name__)
@@ -258,6 +297,12 @@ class TransformerDecoderLayer(nn.Module):
 
         self.drop_path = DropPath(drop_path_rate, batch_axis=1)
 
+        if cfg.modal_ffn:
+            self.experts_num =  int(len(ModalityType))
+            self.experts_fc1 = nn.ModuleList([copy.deepcopy(self.fc1) for i in range(self.experts_num)])
+            self.experts_fc2 = nn.ModuleList([copy.deepcopy(self.fc2) for i in range(self.experts_num)])
+            self.gates_way = torch.eye(self.experts_num)
+
     def build_self_attention(self, embed_dim, cfg, add_bias_kv=False, add_zero_attn=False):
         return MultiheadAttention(
             embed_dim,
@@ -287,6 +332,22 @@ class TransformerDecoderLayer(nn.Module):
     def residual_connection(self, x, residual):
         return residual + self.drop_path(x)
 
+    def modal_for_ffn(self, modal_mask, x, experts_fc):
+        modal_mask_fc = modal_mask
+        bs, seq_len = modal_mask_fc.shape
+        modal_mask_fc = modal_mask_fc.view(bs * seq_len)
+        gates  = torch.index_select(self.gates_way.to(modal_mask_fc.device) , 0, modal_mask_fc)
+        gates = gates.view(bs * seq_len, self.experts_num)
+        dispatcher = SparseDispatcher(self.experts_num, gates)
+        seq_len, bs, dim = x.shape
+        x = x.view(seq_len * bs, dim)
+        expert_inputs = dispatcher.dispatch(x)
+        expert_outputs = [experts_fc[i](expert_inputs[i]) for i in range(self.experts_num)]
+        x = dispatcher.combine(expert_outputs)
+        x = x.view(seq_len, bs, -1)
+        x = x.half()
+        return x
+
     def forward(
         self,
         x,
@@ -301,6 +362,7 @@ class TransformerDecoderLayer(nn.Module):
         need_head_weights: bool = False,
         self_attn_bias: Optional[Tensor] = None,
         cross_attn_bias: Optional[Tensor] = None,
+        modal_mask = None,
     ):
         """
         Args:
@@ -410,11 +472,20 @@ class TransformerDecoderLayer(nn.Module):
         if self.normalize_before:
             x = self.final_layer_norm(x)
 
-        x = self.activation_fn(self.fc1(x))
+        # ffn1 modal
+        if self.cfg.modal_ffn:
+            x = self.modal_for_ffn(modal_mask[:x.shape[1],:x.shape[0]], x, self.experts_fc1)
+            x = self.activation_fn(x)
+        else:
+            x = self.activation_fn(self.fc1(x))
         x = self.activation_dropout_module(x)
         if self.ffn_layernorm is not None:
             x = self.ffn_layernorm(x)
-        x = self.fc2(x)
+        # ffn2 modal
+        if self.cfg.modal_ffn:
+            x = self.modal_for_ffn(modal_mask[:x.shape[1],:x.shape[0]], x, self.experts_fc2)
+        else:
+            x = self.fc2(x)
         x = self.dropout_module(x)
         if self.w_resid is not None:
             residual = torch.mul(self.w_resid, residual)
@@ -450,4 +521,10 @@ class TransformerDecoderLayer(nn.Module):
         prefix = name + "." if name != "" else ""
         for param_name, param_tensor in self.state_dict().items():
             if (prefix + param_name) not in state_dict:
-                state_dict[prefix + param_name] = self.state_dict()[param_name]
+                for i in range(self.experts_num):
+                    if param_name.find("experts_fc1"+"."+str(i)) != -1:
+                        state_dict[prefix + param_name] = self.state_dict()[param_name.replace("experts_fc1"+"."+str(i), "fc1")]
+                    if param_name.find("experts_fc2"+"."+str(i)) != -1:
+                        state_dict[prefix + param_name] = self.state_dict()[param_name.replace("experts_fc2"+"."+str(i), "fc2")]
+                if param_name.find("experts_fc1") == -1 and param_name.find("experts_fc2") == -1:
+                    state_dict[prefix + param_name] = self.state_dict()[param_name]

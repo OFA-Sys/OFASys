@@ -4,7 +4,7 @@
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -36,6 +36,22 @@ class TextAdaptorConfig(BaseAdaptorConfig):
         default=256,
         metadata={"help": "token bucket size"},
     )
+    share_input_output_embed: bool = field(
+        default=True,
+        metadata={"help": "share_input_output_embed"},
+    )
+    output_embed_dim: Optional[int] = field(
+        default=512,
+        metadata={"help": "output_dim"},
+    )
+    output_dim: Optional[int] = field(
+        default=None,
+        metadata={"help": "output_dim"},
+    )
+    output_bias: bool = field(
+        default=False,
+        metadata={"help": "output_embed_bias"},
+    )
 
 
 @register_config("ofasys.adaptor", "text", TextAdaptorConfig)
@@ -63,6 +79,15 @@ class TextAdaptor(BaseAdaptor):
         self.register_buffer("token_rp_bucket", token_rp_bucket)
         # TODO: use II("model.share_all_embeddings") when II is supported
         self.share_input_output_embed = True
+        if not cfg.share_input_output_embed:
+            self.share_input_output_embed = False
+        self.output_dim: int = cfg.output_dim
+        if self.output_dim is None:
+            self.output_dim = len(dictionary)
+
+        self.output_embed_dim = cfg.output_embed_dim
+
+        self.output_embed_bias: bool = cfg.output_bias
         self.output_projection = None
         self.build_output_projection(dictionary)
 
@@ -70,7 +95,7 @@ class TextAdaptor(BaseAdaptor):
         if self.share_input_output_embed:
             self.output_projection = self.embed_tokens_T
         else:
-            self.output_projection = nn.Linear(self.output_embed_dim, len(dictionary), bias=False)
+            self.output_projection = nn.Linear(self.output_embed_dim, self.output_dim, bias=self.output_embed_bias)
             nn.init.normal_(self.output_projection.weight, mean=0, std=self.output_embed_dim**-0.5)
 
     def get_rel_pos_bias(self, batch_size, seq_length, idx, **kwargs):
@@ -92,7 +117,10 @@ class TextAdaptor(BaseAdaptor):
                   of shape ``(batch, src_len, embed_dim)``
         """
         src_tokens = slot.value
-        padding_masks = src_tokens.eq(self.dictionary.pad())
+        if self.dictionary.pad() is not None:
+            padding_masks = src_tokens.eq(self.dictionary.pad())
+        else:
+            padding_masks = torch.zeros_like(src_tokens, dtype=torch.bool)
         pos_embed = self.embed_positions(utils.new_arange(src_tokens))
         token_embedding = self.embed_tokens(src_tokens)
 

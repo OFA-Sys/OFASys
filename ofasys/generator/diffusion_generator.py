@@ -9,11 +9,14 @@ import numpy as np
 import torch
 
 from ofasys import ModalityType
-from ofasys.module.diffusion import ElucidatedDiffusion, GaussianDiffusion
-from ofasys.module.motion_6d import BvhObject
-from ofasys.preprocessor import Slot
-
-from .base import BatchGeneratorOutput, Generator, GeneratorOutput, to_numpy
+from ofasys.generator.base import (
+    BatchGeneratorOutput,
+    Generator,
+    GeneratorOutput,
+    to_numpy,
+)
+from ofasys.module.diffusion import DiffusionWrapper, build_denoise_fn
+from ofasys.module.motion_6d import BvhHeader
 
 
 @dataclass
@@ -25,9 +28,10 @@ class MotionOutput(GeneratorOutput):
     """
 
     feature: Union[torch.FloatTensor, np.ndarray]
-    bvh: Optional[BvhObject] = None
     target_feature: Optional[Union[torch.FloatTensor, np.ndarray]] = None
     prompt: Optional[str] = None
+    bvh_header: Optional[BvhHeader] = None
+    bvh_motion: Optional[np.ndarray] = None
 
     def save_as_gif(self, gif_name: str):
         """
@@ -37,10 +41,9 @@ class MotionOutput(GeneratorOutput):
             gif_name: save file path.
 
         """
-        assert self.bvh is not None
         if not gif_name.endswith(".gif"):
             gif_name = gif_name + ".gif"
-        self.bvh.save_as_gif(gif_name)
+        self.bvh_header.save_as_gif(self.bvh_motion, gif_name)
 
     def save_as_bvh(self, bvh_name: str):
         """
@@ -50,10 +53,9 @@ class MotionOutput(GeneratorOutput):
             bvh_name: save file path.
 
         """
-        assert self.bvh is not None
         if not bvh_name.endswith(".bvh"):
             bvh_name = bvh_name + ".bvh"
-        self.bvh.save_as_bvh(bvh_name)
+        self.bvh_header.save_as_bvh(self.bvh_motion, bvh_name)
 
     def save_features(self, feature_name: str):
         """
@@ -68,80 +70,25 @@ class MotionOutput(GeneratorOutput):
             "target_feature": to_numpy(self.target_feature),
             "prompt": self.prompt,
         }
-        if not feature_name.endwith(".npz"):
+        if not feature_name.endswith(".npz"):
             feature_name = feature_name + ".npz"
         np.savez(file=feature_name, **data)
 
 
 class DiffusionGenerator(Generator):
-    def __init__(
-        self, preprocessor, diffusion=None, diffuser_type="ddpm", stepwise_clamp=True, output_shape=None, **kwargs
-    ):
-        """Diffusion generator for motion modality.
+    def __init__(self, general_preprocess, diffuser_args, **kwargs):
+        """Diffusion generator.
 
         Args:
-            preprocessor: object of preprocessor.
-            diffusion: diffuser object, if None will init according to diffuser_type.
-            diffuser_type: diffuser_type. ddpm, ddim, elucidated are available.
-            stepwise_clamp: whether use step wise clamp.
-            output_shape: output shape.
+            general_preprocess: object of general preprocessor.
+            diffuser_args: arguments passed to the __init__ of a Diffusion implementation such as GaussianDiffusion
         """
         super().__init__()
-        self.preprocessor = preprocessor
-        self.stepwise_clamp = stepwise_clamp
-
-        self.dtype = kwargs.pop("dtype", torch.float32)
-        self.device = kwargs.pop("device", None)
-
-        if diffusion is not None:
-            self.diffusion = diffusion
-        elif diffuser_type == "ddpm":
-            num_sample_steps = kwargs.pop("num_sample_steps", 1000)
-            beta_schedule = kwargs.pop("beta_schedule", "cosine")
-            self.diffusion = GaussianDiffusion(
-                num_sample_steps=num_sample_steps, beta_schedule=beta_schedule, device=self.device
-            )
-        elif diffuser_type == "ddim":
-            num_sample_steps = kwargs.pop("num_sample_steps", 1000)
-            beta_schedule = kwargs.pop("beta_schedule", "cosine")
-            ddim_steps = kwargs.pop("ddim_steps", 200)
-            ddim_eta = kwargs.pop("ddim_eta", 1.0)
-            self.diffusion = GaussianDiffusion(
-                num_sample_steps=num_sample_steps,
-                beta_schedule=beta_schedule,
-                use_ddim=True,
-                ddim_steps=ddim_steps,
-                ddim_eta=ddim_eta,
-                device=self.device,
-            )
-        elif diffuser_type == "elucidated":
-            num_sample_steps = kwargs.pop("num_sample_steps", 32)
-            sigma_min = kwargs.pop("sigma_min", 0.002)
-            sigma_max = kwargs.pop("sigma_max", 80)
-            sigma_data = kwargs.pop("sigma_data", 0.5)
-            rho = kwargs.pop("rho", 7)
-            p_mean = kwargs.pop("p_mean", -1.2)
-            p_std = kwargs.pop("p_std", 1.2)
-            s_churn = kwargs.pop("s_churn", 80)
-            s_tmin = kwargs.pop("s_tmin", 0.05)
-            s_tmax = kwargs.pop("s_tmax", 50)
-            s_noise = kwargs.pop("s_noise", 1.003)
-            self.diffusion = ElucidatedDiffusion(
-                num_sample_steps=num_sample_steps,
-                sigma_min=sigma_min,
-                sigma_max=sigma_max,
-                sigma_data=sigma_data,
-                rho=rho,
-                p_mean=p_mean,
-                p_std=p_std,
-                s_churn=s_churn,
-                s_tmin=s_tmin,
-                s_tmax=s_tmax,
-                s_noise=s_noise,
-            )
-        else:
-            raise ValueError
-        self.output_shape = output_shape
+        self.general_preprocess = general_preprocess
+        self.dtype = kwargs.get("dtype", torch.float32)
+        self.device = kwargs.get("device", None)
+        self.diffusion = DiffusionWrapper(**diffuser_args)
+        self.guidance_weight = kwargs.get("guidance_weight", 0.0)
 
     @torch.no_grad()
     def generate(self, model, sample, **kwargs):
@@ -150,48 +97,21 @@ class DiffusionGenerator(Generator):
         """
         model.eval()
 
-        net_input = sample["net_input"]
-        source_slots = list(filter(lambda x: x.is_src, net_input['slots']))
-        target_slot = Slot.get_target_slot_from_slots(net_input["slots"])
-        origin_target_slot_value = target_slot.value
-        assert target_slot.modality == ModalityType.MOTION, (
-            f"the target slot does not match the generator,"
-            f" target_slot: {target_slot.modality}, generator: DiffusionGenerator"
-        )
+        denoise_fn, x_dummy, target_slot = build_denoise_fn(sample["net_input"], model, reuse_encoder_out=True)
+        preprocessor = self.general_preprocess.get_preprocess(target_slot)
 
-        output_shape = self.output_shape
-        if output_shape is None:
-            assert target_slot.value is not None
-            output_shape = target_slot.value["value"].shape[1:]
+        assert target_slot.modality == ModalityType.MOTION, "Modality other than MOTION not tested yet."
+        bsz, output_shape = x_dummy.shape[0], x_dummy.shape[1:]
 
-        if source_slots[0].modality == ModalityType.AUDIO:
-            src_tokens = source_slots[0].value["fbank"]
-        else:
-            src_tokens = source_slots[0].value
-        bsz = src_tokens.shape[0]
-
-        encoder_out = model.encoder.forward(slots=source_slots)
-
-        if self.stepwise_clamp:
-            postproc_fn = getattr(self.preprocessor, 'custom_clamp', None)
-        else:
-            postproc_fn = None
-
-        def denoise_fn(noised_inputs, noise_levels):
-            target_slot.value = {}
-            target_slot.value.update(origin_target_slot_value)
-            target_slot.value["value"] = noised_inputs
-            target_slot.value["noise_level"] = noise_levels
-
-            net_output = model.decoder.forward(
-                slots=[target_slot],
-                encoder_out=encoder_out,
-                full_context_alignment=True,
-            )
-            return net_output[0]
-
+        postproc_fn = preprocessor.build_clamp_fn(slot=target_slot)
         outputs = self.diffusion.sample(
-            denoise_fn, bsz, output_shape, device=self.device, float_dtype=self.dtype, postproc_fn=postproc_fn
+            denoise_fn,
+            bsz,
+            output_shape,
+            device=self.device,
+            float_dtype=self.dtype,
+            postproc_fn=postproc_fn,
+            guidance_weight=self.guidance_weight,
         )
 
         finalized: BatchGeneratorOutput = [MotionOutput(feature=outputs[i]) for i in range(bsz)]

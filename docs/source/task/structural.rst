@@ -65,7 +65,7 @@ Usage
 
 .. code:: python
 
-    >>> instruction = '<BOS> structured knowledge: " [TEXT:database] "  . how to describe the tripleset ? <EOS> -> <BOS> [TEXT:tgt] '
+    >>> instruction = 'structured knowledge: " [TEXT:database] "  . how to describe the tripleset ? -> [TEXT:tgt] '
     >>> data = {'database': database}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)

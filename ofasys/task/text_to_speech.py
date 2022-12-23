@@ -42,6 +42,9 @@ class Text2SpeechTask(OFATask):
         super().__init__(cfg, **kwargs)
         local_config_yaml = cached_path(cfg.config_yaml)
         self.data_cfg = S2TDataConfig(Path(local_config_yaml))
+
+    def initialize(self, global_dict, **kwargs):
+        super().initialize(global_dict, **kwargs)
         if self.cfg.eval_tts:
             audio_preprocessor = self.general_preprocess.name2pre["audio"]
             if torch.cuda.is_available() and not self.cfg.cpu:

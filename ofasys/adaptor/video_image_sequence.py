@@ -2,6 +2,7 @@
 # This source code is licensed under the Apache 2.0 license
 # found in the LICENSE file in the root directory.
 
+import math
 from dataclasses import dataclass, field
 
 import torch
@@ -46,9 +47,6 @@ class VideoImageSequenceAdaptorConfig(BaseAdaptorConfig):
     )
 
 
-import math
-
-
 def make_video_bucket_position(bucket_size, max_position=8192):
     context_pos = torch.arange(max_position, dtype=torch.long)[:, None]
     memory_pos = torch.arange(max_position, dtype=torch.long)[None, :]
@@ -73,7 +71,7 @@ class VideoImageSequenceAdaptor(BaseAdaptor):
         cfg: VideoImageSequenceAdaptorConfig,
     ):
         super().__init__(embed_tokens, dictionary, is_src, general_adaptor, cfg)
-        self.embed_frame_positions = Embedding(1024 + 1, cfg.embed_dim)
+        self.embed_frame_positions = Embedding(1024 + 1, cfg.embed_dim, zero_init=True)
         video_num_rel_dis = 2 * cfg.token_bucket_size - 1
         video_rp_bucket = make_video_bucket_position(cfg.token_bucket_size, 1024)
 
@@ -208,3 +206,16 @@ class VideoImageSequenceAdaptor(BaseAdaptor):
             self_attn_bias = [None] * self.num_layers
 
         return AdaptorOutput(video_embed, video_padding_mask, video_pos_embed, self_attn_bias)
+
+    def upgrade_state_dict_named(self, state_dict, name):
+        if name == 'encoder.adaptor.video_image_sequence':
+            resnet_prefix = name.replace('video_image_sequence', 'image_resnet')
+            keys = [
+                'layernorm_embedding.weight', 'layernorm_embedding.bias',
+                'layernorm_position.weight', 'layernorm_position.bias',
+                'type_embedding.weight',
+            ]
+            for key in keys:
+                full_key = f'{name}.{key}'
+                if full_key not in state_dict:
+                    state_dict[full_key] = state_dict[f'{resnet_prefix}.{key}'].clone()

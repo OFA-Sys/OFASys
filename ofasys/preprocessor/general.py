@@ -3,7 +3,7 @@
 # found in the LICENSE file in the root directory.
 
 import logging
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ PreprocessConfig = ConfigStore().make_dataclass(
     "ofasys.preprocess",
     "PreprocessConfig",
     __name__,
-    ['text', 'image', 'image_vqgan', 'box', 'audio', 'phone'],
+    ['text', 'category', 'image', 'image_vqgan', 'box', 'audio', 'phone'],
 )
 
 default_preprocess = {
@@ -30,7 +30,7 @@ default_preprocess = {
     ModalityType.AUDIO: 'audio',
     ModalityType.PHONE: 'phone',
     ModalityType.VIDEO: 'video',
-    ModalityType.STRUCT: 'struct',
+    ModalityType.STRUCT: 'table',
 }
 
 
@@ -101,7 +101,7 @@ class GeneralPreprocess:
         group_slots = [
             self.name2pre[default_preprocess[self.get_preprocess(group[0]).group_key(group[0])]].group_map(group)
             if len(group) > 1
-            else group
+            else self.get_preprocess(group[0]).group_map(group)
             for group in group_slots
         ]
         slots = [slot for group in group_slots for slot in group]
@@ -142,3 +142,17 @@ class GeneralPreprocess:
             data = [ist.others[key] for ist in samples]
             result[key] = collate_others(data)
         return result
+
+    def postprocess(self, outputs, **sample):
+        target_slot = Slot.get_target_slot_from_sample(sample)
+        processor = self.get_preprocess(target_slot)
+        try:
+            return processor.postprocess(outputs, **sample)
+        except NotImplementedError:
+            if target_slot.get_attr('preprocess'):
+                preprocessor_name = target_slot.get_attr('preprocess')
+            else:
+                preprocessor_name = default_preprocess[target_slot.modality]
+            raise NotImplementedError(
+                f"{preprocessor_name} preprocessor has no postprocess function, but it is used for postprocessing."
+            )

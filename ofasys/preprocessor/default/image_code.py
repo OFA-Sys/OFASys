@@ -119,10 +119,10 @@ class VQGANCodePreprocess(SafeBasePreprocess):
 
         # add vocab size
         tokens = tokens + self.code_index_start
-        if slot.has_attr('add_bos'):
-            tokens = torch.cat([torch.LongTensor([self.global_dict.bos()]), tokens])
-        if slot.has_attr('add_eos'):
-            tokens = torch.cat([tokens, torch.LongTensor([self.global_dict.eos()])])
+        if slot.is_src is False:
+            tokens = torch.cat(
+                [torch.LongTensor([self.global_dict.bos()]), tokens, torch.LongTensor([self.global_dict.eos()])]
+            )
         slot.value = tokens
         return slot
 
@@ -159,13 +159,13 @@ class VQGANCodePreprocess(SafeBasePreprocess):
                 return CollateOutput(slots[0])
             else:
                 input_value = collate_tokens(
-                    [slot.value[:-1] for slot in slots],
+                    [slot.value[:-1] for slot in slots],  # skip <EOS>
                     pad_idx=self.global_dict.pad(),
                     eos_idx=self.global_dict.eos(),
                     pad_to_multiple=self.cfg.pad_to_multiple,
                 )
                 target_value = collate_tokens(
-                    [slot.value[1:] for slot in slots],
+                    [slot.value[1:] for slot in slots],  # skip <BOS>
                     pad_idx=self.global_dict.pad(),
                     eos_idx=self.global_dict.eos(),
                     pad_to_multiple=self.cfg.pad_to_multiple,

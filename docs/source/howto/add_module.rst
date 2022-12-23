@@ -193,7 +193,7 @@ The original content of ``caption.yaml`` is:
 
     task_name: caption
     instruction:
-         - '[IMAGE:image] <BOS> what does the image describe? <EOS> -> <BOS> [TEXT:caption] <EOS>'
+         - '[IMAGE:image] what does the image describe? -> [TEXT:caption]'
 
 We can change to use ViT as the image adaptor instead of ResNet, by simply modify the instruction.
 
@@ -201,5 +201,5 @@ We can change to use ViT as the image adaptor instead of ResNet, by simply modif
 
     task_name: caption
     instruction:
-         - '[IMAGE:image,adaptor=image_vit] <BOS> what does the image describe? <EOS> -> <BOS> [TEXT:caption] <EOS>'
+         - '[IMAGE:image,adaptor=image_vit] what does the image describe? -> [TEXT:caption]'
 

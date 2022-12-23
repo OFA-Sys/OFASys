@@ -14,6 +14,9 @@ from ofasys.task.base import OFATask, TaskConfig
 class GLUEGenTask(OFATask):
     def __init__(self, cfg: TaskConfig, **kwargs):
         super().__init__(cfg, **kwargs)
+
+    def initialize(self, global_dict, **kwargs):
+        super().initialize(global_dict, **kwargs)
         text_pre = self.general_preprocess.name2pre['text']
         self.label2ans_d = {v: k for k, v in text_pre.ans2label_dict.items()}
 

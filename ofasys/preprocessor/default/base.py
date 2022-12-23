@@ -93,6 +93,9 @@ class BasePreprocess(ABC):
         """
         raise NotImplementedError
 
+    def postprocess(self, outputs, **sample):
+        raise NotImplementedError
+
 
 class SafeBasePreprocess(BasePreprocess):
     def __init__(
@@ -107,13 +110,13 @@ class SafeBasePreprocess(BasePreprocess):
         self._sanity_check = sanity_check
 
     def map(self, slot: Slot) -> Slot:
-        # if self._sanity_check:
-        #     assert slot.modality == self._modality_type
+        if self._sanity_check:
+            assert slot.modality == self._modality_type
         return slot
 
     def group_map(self, slots: List[Slot]) -> List[Slot]:
         if self._sanity_check:
-            assert len(slots) > 1
+            # assert len(slots) > 1
             for i, slot in enumerate(slots):
                 # assert slot.modality == self._modality_type
                 assert slot.is_src == slots[0].is_src
@@ -191,10 +194,6 @@ class BaseCodePreprocess(SafeBasePreprocess):
 
         # add vocab size
         tokens = tokens + self.code_index_start
-        if slot.has_attr('add_bos'):
-            tokens = torch.cat([torch.LongTensor([self.global_dict.bos()]), tokens])
-        if slot.has_attr('add_eos'):
-            tokens = torch.cat([tokens, torch.LongTensor([self.global_dict.eos()])])
         slot.value = tokens
         return slot
 

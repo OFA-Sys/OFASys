@@ -169,7 +169,7 @@ class LabelSmoothedCrossEntropyCriterion(BaseCriterion):
                 constraint_masks = constraint_masks[:, self.ignore_prefix_size :, :].contiguous()
 
         if constraint_masks is not None:
-            constraint_masks = constraint_masks.view(-1, constraint_masks.size(-1))
+            constraint_masks = constraint_masks.reshape(-1, constraint_masks.size(-1))
         return lprobs.view(-1, lprobs.size(-1)), target.view(-1), constraint_masks
 
     def compute_loss(self, model, net_output, sample, update_num, reduce=True):

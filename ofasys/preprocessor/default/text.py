@@ -4,14 +4,12 @@
 
 import copy
 import json
-import re
 import string
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 import numpy as np
 import torch
-from omegaconf import DictConfig
 
 from ofasys.configure import ChoiceEnum, register_config
 from ofasys.utils.file_utils import cached_path
@@ -56,8 +54,6 @@ class TextPreprocessConfig(PreprocessConfig):
 
 @register_config("ofasys.preprocess", "text", TextPreprocessConfig)
 class DefaultTextPreprocess(SafeBasePreprocess):
-    _bos_eos_regex = re.compile(r'(<[BE]OS>)')
-
     def build_bpe(self, cfg):
         if cfg.bpe == 'gpt2':
             dict_bpe = GPT_DICT
@@ -69,8 +65,8 @@ class DefaultTextPreprocess(SafeBasePreprocess):
             raise NotImplementedError
         return bpe, dict_bpe
 
-    def __init__(self, global_dict: Dictionary, cfg: TextPreprocessConfig):
-        super().__init__(global_dict, cfg, ModalityType.TEXT)
+    def __init__(self, global_dict: Dictionary, cfg: TextPreprocessConfig, sanity_check=False):
+        super().__init__(global_dict, cfg, ModalityType.TEXT, sanity_check=sanity_check)
         self.bpe, bpe_dict = self.build_bpe(cfg)
         self.global_dict.add_from_file(cached_path(bpe_dict), prefix='<text>')
         self.global_dict.add_symbol("<mask>", check=False)
@@ -117,24 +113,13 @@ class DefaultTextPreprocess(SafeBasePreprocess):
             return slot
 
         text = slot.value
-        # TODO: slot value could be a dict of tensors after user-defined preprocess
-        # if (
-        #     isinstance(text, np.ndarray) and np.issubdtype(text.dtype, np.integer)
-        #     and text.ndim == 1
-        # ):
-        #     return torch.LongTensor(text)
-        # elif (
-        #     (isinstance(text, torch.IntTensor) or isinstance(text, torch.LongTensor))
-        #     and text.ndim == 1
-        # ):
-        #     return text.long()
 
         if isinstance(text, str):
-            tokens = self.encode_rich(
-                text,
-                uncased=slot.has_attr('uncased'),
-                no_punctuation=slot.has_attr('no_punctuation'),
-            )
+            if slot.has_attr('uncased'):
+                text = text.lower()
+            if slot.has_attr('no_punctuation'):
+                text = ' '.join(remove_punctuation(text).strip().split())
+            tokens = self.encode(text)
         elif isinstance(text, np.ndarray) and np.issubdtype(text.dtype, np.integer) and text.ndim == 1:
             tokens = self.global_dict.encode(text, add_if_not_exist=False, append_eos=False).long()
         else:
@@ -144,10 +129,6 @@ class DefaultTextPreprocess(SafeBasePreprocess):
         if slot.get_attr('max_length', int):
             max_length = slot.get_attr('max_length', int)
             tokens = tokens[:max_length]
-        if slot.has_attr('add_bos'):
-            tokens = torch.cat([torch.LongTensor([self.global_dict.bos()]), tokens])
-        if slot.has_attr('add_eos'):
-            tokens = torch.cat([tokens, torch.LongTensor([self.global_dict.eos()])])
 
         # process input tokens
         if slot.get_attr('noise_ratio', float) and slot.split == 'train':
@@ -183,9 +164,6 @@ class DefaultTextPreprocess(SafeBasePreprocess):
             target = tokens.masked_fill(loss_mask, self.global_dict.pad())
             # prefix_tokens are used in inference
             prefix_tokens = tokens if no_loss and slot.split != 'train' else torch.LongTensor([])
-            # TODO: remove after merging eos and bos
-            prefix_tokens = torch.LongTensor([]) if len(tokens) == 1 and tokens[0] == self.global_dict.eos() else prefix_tokens
-
         else:
             target = None
             prefix_tokens = None
@@ -214,37 +192,14 @@ class DefaultTextPreprocess(SafeBasePreprocess):
     def group_map(self, slots: List[Slot]) -> List[Slot]:
         super().group_map(slots)
         for slot in slots:
-            if isinstance(slot.value, torch.Tensor):
+            if isinstance(slot.value, torch.Tensor):  # other mods except text will enter this block
                 slot.value = {
                     'inputs': slot.value,
                     'target': None if slot.is_src else slot.value,
                     'constraint_masks': None,
                     'raw_tokens': slot.value,
-                    'prefix_tokens': None if slot.is_src else slot.value,
+                    'prefix_tokens': None if slot.is_src else torch.LongTensor([]),
                 }
-
-        # Return True if
-        # 1. current slot is plain text
-        # 2. the leading tokens is eos
-        # 3. the last slot has loss
-        def _leading_eos_with_loss(i):
-            return (
-                # current slot is target's plain text
-                slots[i].is_plaintext
-                and i > 0
-                # start with eos
-                and slots[i].value['raw_tokens'][0] == self.global_dict.eos()
-                # last slot has loss
-                and len(slots[i - 1].value['target']) > 0
-                and slots[i - 1].value['target'][-1] != self.global_dict.pad()
-            )
-
-        # process target tokens
-        if any(map(lambda x: x.value['target'] is not None, slots)):
-            for i, slot in enumerate(slots):
-                if _leading_eos_with_loss(i):
-                    # set the eos with loss
-                    slot.value['target'][0] = slot.value['raw_tokens'][0]
 
         # process prefix_tokens, skipping tokens with loss is not supported
         if any(map(lambda x: x.value['target'] is not None, slots)):
@@ -262,30 +217,53 @@ class DefaultTextPreprocess(SafeBasePreprocess):
                     slot.value['constraint_masks'] = torch.zeros(
                         (len(slot.value['raw_tokens']), len(self.global_dict)), dtype=torch.bool
                     )
-                if _leading_eos_with_loss(i):
-                    # set the eos with constraint masks
-                    cons_prefix_token = [self.global_dict.bos()] + slots[i - 1].value['raw_tokens'].tolist()
-                    cons_nodes = self.constraint_trie.get_next_layer(cons_prefix_token)
-                    slot.value['constraint_masks'][0][cons_nodes] = True
 
         value = {}
         for key in slots[0].value.keys():
             if any(map(lambda slot: slot.value[key] is not None, slots)):
                 value[key] = torch.cat([slot.value[key] for slot in slots], dim=0)
+                if key in ['inputs', 'raw_tokens', 'target', 'prefix_tokens'] and not slots[0].has_attr(
+                    'disable_auto_boseos'
+                ):
+                    value[key] = torch.cat(
+                        [
+                            torch.LongTensor([self.global_dict.bos()]),
+                            value[key],
+                            torch.LongTensor([self.global_dict.eos()]),
+                        ]
+                    )
             else:
                 value[key] = None
+
+        if any(map(lambda x: x.value['constraint_masks'] is not None, slots)) and self.constraint_trie is not None:
+            # Only if the last slot has constraint_masks, the eos has constraint_masks.
+            # Currently, only tasks image_classify and video_classify have closed_set attribute.
+            # In these two cases, slots have only one slot. Thus the last slot has constraint_masks.
+            assert slots[-1].value['constraint_masks'] is not None
+            constraint_eos = torch.zeros((1, len(self.global_dict)), dtype=torch.bool)
+            cons_prefix_token = [self.global_dict.bos()] + slots[-1].value['raw_tokens'].tolist()
+            cons_nodes = self.constraint_trie.get_next_layer(cons_prefix_token)
+            constraint_eos[0][cons_nodes] = True
+            value['constraint_masks'] = torch.cat(
+                [
+                    torch.zeros((1, len(self.global_dict)), dtype=torch.bool),
+                    value['constraint_masks'],
+                    constraint_eos,
+                ]
+            )
 
         for key in value.keys():
             if value[key] is not None:
                 if slots[0].is_src:
-                    max_length = self.cfg.max_src_length
-                else:
-                    max_length = self.cfg.max_tgt_length
-                value[key] = value[key][:max_length]
+                    max_length = getattr(self.cfg, 'max_src_length', None)
+                elif not slots[0].is_src:
+                    max_length = getattr(self.cfg, 'max_tgt_length', None)
+                if max_length is not None:
+                    value[key] = value[key][: max_length + 1]
 
         return [
             Slot(
-                modality=ModalityType.TEXT,
+                modality=slots[0].modality,
                 is_src=slots[0].is_src,
                 value=value,
                 global_position=0,
@@ -328,39 +306,20 @@ class DefaultTextPreprocess(SafeBasePreprocess):
                 slot.value['target'] = slot.value['target'][1:]
             target_slot.value = _collate('target')
             for slot in slots:
-                slot.value['prefix_tokens'] = slot.value['prefix_tokens'][1:]
+                slot.value['prefix_tokens'] = slot.value['prefix_tokens'][1:-1]  # skip bos and eos
             prefix_tokens = _collate('prefix_tokens')
             # for legacy compatible
             ntokens = target_slot.value.ne(self.global_dict.pad()).long().sum().item()
             extra_dict = {
                 "target": target_slot.value,
                 "ntokens": ntokens,
-                "dict_start": self.dict_text_start,
-                "dict_end": self.dict_text_end,
+                "dict_start": getattr(self, 'dict_text_start', None),
+                "dict_end": getattr(self, 'dict_text_end', None),
                 "prefix_tokens": prefix_tokens,
             }
             if slots[0].value['constraint_masks'] is not None:
                 extra_dict['constraint_masks'] = _collate('constraint_masks')[:, 1:]
             return CollateOutput(input_slot, target_slot, extra_dict)
-
-    def encode_rich(self, text, uncased=False, no_punctuation=False):
-        tokens = []
-        for part in self._bos_eos_regex.split(text):
-            if not part:
-                continue
-            elif part == '<BOS>':
-                tokens.append(torch.LongTensor([self.global_dict.bos()]))
-            elif part == '<EOS>':
-                tokens.append(torch.LongTensor([self.global_dict.eos()]))
-            else:
-                if uncased:
-                    part = part.lower()
-                if no_punctuation:
-                    part = ' '.join(remove_punctuation(part).strip().split())
-                tokens.append(self.encode(part.strip()))
-        if len(tokens) == 0:  # torch.cat will fail when given an empty list
-            return torch.LongTensor([])
-        return torch.cat(tokens)
 
     def encode(self, text):
         s = self.bpe.encode(' ' + text.strip())
@@ -392,6 +351,24 @@ class DefaultTextPreprocess(SafeBasePreprocess):
         s = self.remove_prefix(s, '<text>')
         s = self.bpe.decode(s).strip()
         return s
+
+    def postprocess(self, outputs, **sample):
+        def process_fn(idx: int, output):
+            if "prefix_tokens" in sample:
+                prefix_len = (
+                    sample["prefix_tokens"][idx].ne(self.global_dict.pad())
+                    * sample["prefix_tokens"][idx].ne(self.global_dict.eos())
+                ).sum()
+                output.tokens = output.tokens[prefix_len:]
+            output.text = self.decode(output.tokens)
+
+        for idx, single_output in enumerate(outputs):
+            if isinstance(single_output, List):
+                for sub_output in single_output:
+                    process_fn(idx, sub_output)
+            else:
+                process_fn(idx, single_output)
+        return outputs
 
     def _add_noise(self, target, p: float):
         noise_indices = torch.FloatTensor(target.size(0)).uniform_() < p

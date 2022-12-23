@@ -34,6 +34,7 @@ def get_preprocessing_parser(default_task="translation"):
 
 def get_training_parser(default_task="translation"):
     parser = get_parser("Trainer", default_task)
+    parser.add_argument('--ofasys_complete_config', type=str, default='', required=False, help='')
     parser.add_argument('--tables', type=str, help='pai dtables')
     add_dataset_args(parser, train=True)
     add_distributed_training_args(parser)

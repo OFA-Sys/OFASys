@@ -8,6 +8,7 @@ import gc
 import logging
 import math
 import os
+import random
 import sys
 import time
 from argparse import Namespace
@@ -79,6 +80,7 @@ class Trainer(object):
             handler = logging.FileHandler(filename=cfg.common.log_file)
             logger.addHandler(handler)
 
+        random.seed(cfg.common.seed)
         np.random.seed(cfg.common.seed)
         utils.set_torch_seed(cfg.common.seed)
 

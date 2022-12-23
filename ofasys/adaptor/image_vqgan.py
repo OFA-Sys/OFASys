@@ -124,10 +124,8 @@ class ImageVqganAdaptor(BaseAdaptor):
                     image_tensor = slot.value
                     codes = self.tokenizer.encode(image_tensor.float()) + self.code_index_start
                     batch_size = codes.size()[0]
-                    if slot.has_attr('add_bos'):
-                        codes = torch.cat([codes.new_ones((batch_size, 1)) * 0, codes], dim=-1)
-                    if slot.has_attr('add_eos'):
-                        codes = torch.cat([codes, codes.new_ones((batch_size, 1)) * 2], dim=-1)
+                    codes = torch.cat([codes.new_ones((batch_size, 1)) * 0, codes], dim=-1)
+                    codes = torch.cat([codes, codes.new_ones((batch_size, 1)) * 2], dim=-1)
                     sample['net_input']['slots'][i].value = codes[:, :-1].contiguous()
                     sample['target'] = codes[:, 1:].contiguous()
                     sample['ntokens'] = sample['target'].ne(1).long().sum().item()

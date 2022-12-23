@@ -19,6 +19,7 @@ from .subsample import Conv2dSubsampling4
 from .transformer_config import DecoderConfig, EncDecBaseConfig, TransformerConfig
 from .transformer_layer import TransformerDecoderLayer, TransformerEncoderLayer
 from .vit import vit_base, vit_huge, vit_large, vit_large_336
+from .sparse_dispatcher import SparseDispatcher
 
 __all__ = [
     'Embedding',

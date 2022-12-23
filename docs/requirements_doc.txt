@@ -2,6 +2,8 @@ sphinx
 furo
 sphinx_rtd_theme
 sphinx-argparse
+flask
+flask_cors
 sphinxcontrib-video
 furo
 sphinx-copybutton
