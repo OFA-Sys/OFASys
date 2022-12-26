@@ -36,7 +36,10 @@ For now, OFASys supports 7 modalities and more than 20 classes of multi-modal ta
 * Motion: for tasks like Text-to-Motion.
 
 # News
-* 2022.12.23 (v0.1.0-patch1): Refactored and released diffusion-based text-to-motion (v0.1), see [doc](https://ofasys-doc.readthedocs.io/en/latest/task/motion.html) for usage. Automatically add bos and eos in the instruction and refactor the TextPreprocess.
+* 2022.12.23 v0.1.0-patch1:
+  - Refactored and released diffusion-based `Text-to-Motion` task (v0.1), see [doc](https://ofasys-doc.readthedocs.io/en/latest/task/motion.html) for usage.
+  - Refactored TextPreprocess: BOS and EOS no longer required when writing an instruction.
+  - Added DatabasePreprocess for the `Text-to-SQL` task.
 
 # Requirements
 
