@@ -35,6 +35,8 @@ For now, OFASys supports 7 modalities and more than 20 classes of multi-modal ta
 * Structural Language: for tasks like Text-to-SQL, Table-to-Text, Table question answering, and Sudoku.
 * Motion: for tasks like Text-to-Motion.
 
+# News
+* 2022.12.23 (v0.1.0-patch1): Refactored and released diffusion-based text-to-motion (v0.1), see [doc](https://ofasys-doc.readthedocs.io/en/latest/task/motion.html) for usage. Automatically add bos and eos in the instruction and refactor the TextPreprocess.
 
 # Requirements
 
@@ -248,7 +250,25 @@ output[0].save_image('0.png')
 
 <img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/image-gen_example.png" width="400">
   
-  
+### Text-to-Motion Generation
+
+```
+model = OFASys.from_pretrained('single_task_motion.pt')
+instruction = 'motion capture: [TEXT:text] -> [MOTION:bvh_frames,preprocess=motion_6d,adaptor=motion_6d]'
+guided_prompts = [
+    {'text': 'run then jump'},  # # The positive prompt.
+    {'text': ''},  # The negative prompt, or an empty string for classifier-free guidance.
+]
+# This API requires the positive and negative prompts be in the same batch, so please ensure batch_size % 2 == 0.
+output = model.inference(instruction, data=guided_prompts, guidance_weight=3.0, batch_size=2)
+output[0].save_as_gif('run_then_jump__guided.gif')
+```
+
+<img src="https://ofasys.oss-cn-zhangjiakou.aliyuncs.com/examples/run_then_jump_guided.gif" width="400">
+
+The checkpoint of the single motion task and more motion cases can be found at [here](https://ofasys-doc.readthedocs.io/en/latest/task/motion.html).
+
+
 # Learn More
 
 | Section | Description |
