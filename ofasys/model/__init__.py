@@ -4,8 +4,10 @@
 
 from .fairseq_model import BaseModel
 from .ofa import GeneralistModel
+from .decoders.pooling import OFAPoolingModel
 
 __all__ = [
     'BaseModel',
     'GeneralistModel',
+    'OFAPoolingModel'
 ]

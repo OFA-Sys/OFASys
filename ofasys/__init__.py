@@ -8,6 +8,12 @@ import os
 import sys
 from enum import Enum, unique
 
+# Set stdout & stderr encoding to UTF-8
+if sys.stdout.encoding != 'UTF-8':
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+if sys.stderr.encoding != 'UTF-8':
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 
 # We need to setup root logger before importing any libraries.
 logging.basicConfig(
@@ -29,6 +35,7 @@ class ModalityType(Enum):
     PHONE = 6
     VIDEO = 7
     STRUCT = 8
+    CATEGORY = 9
 
     @classmethod
     def parse(cls, mark):
@@ -50,13 +57,12 @@ from . import (
     task,
     utils,
 )
-from .configure import BaseDataclass, TrainerConfig, register_config, ConfigStore
+from .configure import BaseDataclass, ConfigStore, TrainerConfig, register_config
 from .engine import Trainer
 from .hub_interface import OFASys
 from .model import BaseModel, GeneralistModel
 from .preprocessor import Instruction, Slot
 from .task import OFATask as Task
-from .templates import TaskTemplates
 
 __all__ = [
     'ModalityType',
@@ -75,7 +81,6 @@ __all__ = [
     'metric',
     'configure',
     'OFASys',
-    'TaskTemplates',
     'Task',
     'BaseModel',
     'GeneralistModel',

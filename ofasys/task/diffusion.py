@@ -2,7 +2,6 @@
 # This source code is licensed under the Apache 2.0 license
 # found in the LICENSE file in the root directory.
 
-import json
 import os
 import time
 from dataclasses import dataclass, field
@@ -12,45 +11,24 @@ import numpy as np
 from torch.distributed import get_rank
 
 from ofasys.configure import register_config
-from ofasys.generator import DiffusionGenerator, MotionOutput
-from ofasys.module.diffusion import ElucidatedDiffusion, GaussianDiffusion
+from ofasys.generator import MotionOutput
 from ofasys.task.base import OFATask, TaskConfig
+
+# TODO: To be removed. It might be better to just use OFATask.
 
 
 @dataclass
 class DiffusionTaskConfig(TaskConfig):
-    diffuser: str = field(
-        default="ddpm",
-        metadata={"help": "choose from one of the diffusion implementations: ddpm, ddim, elucidated"},
-    )
-    diffuser_args: str = field(
-        default='{"num_sample_steps": 1000}', metadata={"help": "args for the diffuser, as JSON string"}
-    )
     prompt_slot: str = field(default="", metadata={"help": ""})
-    drop_prompt: float = field(default=0.5, metadata={"help": ""})
-    stepwise_clamp: bool = field(default=True, metadata={"help": ""})
+    drop_prompt: float = field(default=0.1, metadata={"help": ""})
 
 
 @register_config("ofasys.task", "diffusion", dataclass=DiffusionTaskConfig)
 class DiffusionTask(OFATask):
     def __init__(self, cfg: DiffusionTaskConfig, **kwargs):
-        diffuser_args = json.loads(cfg.diffuser_args)
-
-        if cfg.diffuser == 'ddpm':
-            self.diffusion = GaussianDiffusion(**diffuser_args)
-        elif cfg.diffuser == 'ddim':
-            self.diffusion = GaussianDiffusion(use_ddim=True, **diffuser_args)
-        elif cfg.diffuser == 'elucidated':
-            self.diffusion = ElucidatedDiffusion(**diffuser_args)
-        else:
-            raise NotImplementedError
+        super().__init__(cfg, **kwargs)
         self.prompt_slot = cfg.prompt_slot
         self.drop_prompt = cfg.drop_prompt
-        self.stepwise_clamp = cfg.stepwise_clamp
-
-        # Put super().__init__ after initializing the diffuser, because super().__init__
-        # will build the diffusion criterion and the criterion will access task.diffusion.
-        super().__init__(cfg, **kwargs)
 
     def preprocess(self, data: Dict[str, Any], split: str) -> Dict[str, Any]:
         if split == "train":
@@ -60,13 +38,6 @@ class DiffusionTask(OFATask):
                 else:
                     raise NotImplementedError("This implementation only supports a text prompt as the condition.")
         return data
-
-    def build_motion_diffusion_generator(self, **gen_kwargs):
-        return DiffusionGenerator(
-            self.general_preprocess.name2pre["motion"],
-            diffusion=self.diffusion,
-            stepwise_clamp=self.stepwise_clamp,
-        )
 
     def inference(self, model, sample, **kwargs):
         try:

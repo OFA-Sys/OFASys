@@ -3,12 +3,15 @@
 # found in the LICENSE file in the root directory.
 
 import os
+import random
 import re
+import random
 import subprocess
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import torch
 
 
 def line_locate_py(file_path: str) -> np.array:
@@ -257,3 +260,10 @@ class FifoLineReader(FifoQueue):
     def close(self):
         if hasattr(self.reader, 'close'):
             self.reader.close()
+
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)

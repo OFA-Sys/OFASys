@@ -10,10 +10,12 @@ from .motion_6d import Motion6dPreprocess
 from .phone import DefaultPhonePreprocess
 from .struct import DefaultStructPreprocess
 from .text import DefaultTextPreprocess
+from .category import CategoryPreprocess
 from .video import DefaultVideoPreprocess
 
 __all__ = [
     'DefaultTextPreprocess',
+    'CategoryPreprocess',
     'DefaultImagePreprocess',
     'VQGANCodePreprocess',
     'DefaultBoxPreprocess',

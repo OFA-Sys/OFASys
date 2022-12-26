@@ -15,6 +15,7 @@ from .base_reader import BaseReader
 from .cached_reader import CachedReader
 from .concat_reader import ConcatReader
 from .file_reader import FileLineReader
+from .mixed_reader import MixedReader
 from .odps_reader import ODPSReader
 from .oss_reader import OssLineReader, OssTextBinReader
 from .tsv_reader import TsvReader
@@ -23,6 +24,7 @@ from .utils import (
     parse_sample_ratios,
     parse_selected_cols,
     partition_data_size,
+    set_seed,
 )
 
 
@@ -365,7 +367,7 @@ class EpochBatchIterator:
         if len(readers) == 1 and tuple(self.sample_ratios) == (1,):
             reader = readers[0]
         else:
-            reader = ConcatReader(readers, self.sample_ratios)
+            reader = MixedReader(readers, self.sample_ratios, self.cfg.interleaved_multiple_reader)
 
         if self.cfg.cached:
             self._persist_reader = CachedReader(reader)
@@ -449,12 +451,16 @@ class EpochBatchIterator:
             )
             self.prefetch_factor = 2
 
+        def worker_init_fn(worker_id):
+            set_seed(self.seed + worker_id)
+
         itr = torch.utils.data.DataLoader(
             self._dataset,
             batch_size=None,
             num_workers=self.num_workers,
             pin_memory=True,
             prefetch_factor=self.prefetch_factor,  # support only when pytorch >= 1.7.0
+            worker_init_fn=worker_init_fn,
         )
         itr = CountingIterator(itr, offset=offset * update_freq)
         if self.update_freq is None:

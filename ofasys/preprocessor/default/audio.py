@@ -5,11 +5,9 @@
 import copy
 import json
 import logging
-import os
 import random
 import struct
 import sys
-from argparse import Namespace
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -251,7 +249,7 @@ class DefaultAudioPreprocess(SafeBasePreprocess):
 
     @property
     def vocoder(self):
-        if self._vocoder is None:
+        if self._vocoder is None and self.cfg.config_yaml is not None:
             data_cfg = S2TDataConfig(Path(cached_path(self.cfg.config_yaml)))
             self._vocoder = build_vocoder(self.cfg, data_cfg)
         return self._vocoder
@@ -346,7 +344,7 @@ class DefaultAudioPreprocess(SafeBasePreprocess):
                 assert wav.ndim == 1, wav.ndim
 
                 wav = torch.from_numpy(wav)
-                wav = self.postprocess(wav)
+                wav = self.maybe_normalize_waveform(wav)
 
                 slot.value = {'wav': wav, 'wav_lengths': wav.shape[0]}
         else:
@@ -389,6 +387,13 @@ class DefaultAudioPreprocess(SafeBasePreprocess):
         """
         waveform = self.vocoder(feature).squeeze(0)
         return waveform
+
+    def postprocess(self, outputs, **sample):
+        for single_output in outputs:
+            single_output.waveform = self.decode(single_output.feature)
+            if single_output.targ_feature is not None:
+                single_output.targ_waveform = self.decode(single_output.targ_feature)
+        return outputs
 
     def collate(self, slots: List[Slot]) -> CollateOutput:
         """
@@ -470,7 +475,7 @@ class DefaultAudioPreprocess(SafeBasePreprocess):
         feature = feature[: n_frames_per_step * n_packed_frames]
         return feature.reshape(n_packed_frames, -1)
 
-    def postprocess(self, wav):
+    def maybe_normalize_waveform(self, wav):
         if self.normalize:
             with torch.no_grad():
                 wav = F.layer_norm(wav, wav.shape)

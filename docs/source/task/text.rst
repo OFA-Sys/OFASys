@@ -23,7 +23,7 @@ Default Template
 
 .. code-block:: console
 
-    <BOS> is the sentiment of text " [TEXT:sentence] " positive or negative? <EOS> -> <BOS> is the sentiment of text " [TEXT:sentence,no_loss] " positive or negative? [TEXT:label,closed_set]
+    is the sentiment of text " [TEXT:sentence] " positive or negative? -> is the sentiment of text " [TEXT:sentence,no_loss] " positive or negative? [TEXT:label,closed_set]
 
 
 Usage
@@ -31,7 +31,7 @@ Usage
 
 .. code-block::
 
-    >>> template = '<BOS> is the sentiment of text " [TEXT:sentence] " positive or negative? <EOS> -> <BOS> is the sentiment of text " [TEXT:sentence,no_loss] " positive or negative? [TEXT:label,closed_set]'
+    >>> template = 'is the sentiment of text " [TEXT:sentence] " positive or negative? -> is the sentiment of text " [TEXT:sentence,no_loss] " positive or negative? [TEXT:label,closed_set]'
     >>> data = {'sentence': "it 's a charming and often affecting journey"}
     >>> output = model.inference(template, data=data)
     >>> print(output.text)
@@ -76,7 +76,7 @@ Usage
 
 .. code:: python
 
-    >>> instruction = '<BOS> what is the summary of article " [TEXT:src] "? <EOS> -> <BOS> [TEXT:tgt] '
+    >>> instruction = 'what is the summary of article " [TEXT:src] "? -> [TEXT:tgt,noise_ratio=0.2] '
     >>> data = {'src': "poland 's main opposition party tuesday endorsed president lech walesa in an upcoming "
     ...        "presidential run-off election after a reformed communist won the first round of voting ."}
     >>> output = model.inference(instruction, data=data)
@@ -140,5 +140,5 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-    what is the complete text of " [TEXT:text,mask_ratio=0.3] "? -> <BOS> [TEXT:text] <EOS>
+    what is the complete text of " [TEXT:text,mask_ratio=0.3] "? -> [TEXT:text]
 

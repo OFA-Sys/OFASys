@@ -10,7 +10,7 @@ def _install_requirements():
 setup(
     name='ofasys',
     version='0.1.0',
-    python_requires='>3.6.0',
+    python_requires='>=3.7.0',
     packages=find_packages(),
     include_package_data=True,
     install_requires=_install_requirements(),

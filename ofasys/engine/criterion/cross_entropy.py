@@ -75,6 +75,7 @@ class CrossEntropyCriterion(BaseCriterion):
         nsentences = sum(log.get("nsentences", 0) for log in logging_outputs)
         sample_size = sum(log.get("sample_size", 0) for log in logging_outputs)
 
+        metrics.log_scalar("loss", loss_sum / sample_size, sample_size, priority=0, round=3)
         metrics.log_scalar(f"{task_name}loss", loss_sum / sample_size, sample_size, round=3)
         if sample_size != ntokens:
             metrics.log_scalar(f"{task_name}nll_loss", loss_sum / ntokens, ntokens, round=3)

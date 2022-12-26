@@ -21,7 +21,7 @@ def run(cmd):
     assert ret == 0
 
 
-def local_create_cache(local_path, ofa_version):
+def local_create_cache(local_path, ofa_version=None):
     assert os.path.exists(local_path)
     if ofa_version:
         cache_path = os.path.join(os.path.dirname(local_path), os.path.basename(local_path) + '.index')
@@ -40,7 +40,7 @@ def local_create_cache(local_path, ofa_version):
 def oss_create_cache(oss_path):
     local_path = os.path.basename(oss_path)
     run('ossutil64 cp {} {}'.format(oss_path, local_path))
-    cache_path = local_create_cache(local_path)
+    cache_path = local_create_cache(local_path, False)
     run('ossutil64 cp {} {}/{}'.format(cache_path, os.path.dirname(oss_path), cache_path))
     run('ossutil64 set-acl {} public-read'.format(oss_path))
     run('ossutil64 set-acl {}/{} public-read'.format(os.path.dirname(oss_path), cache_path))

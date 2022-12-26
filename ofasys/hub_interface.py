@@ -3,6 +3,7 @@
 # found in the LICENSE file in the root directory.
 
 import logging
+from dataclasses import asdict
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -24,14 +25,13 @@ from ofasys.preprocessor import (
     default_preprocess,
 )
 from ofasys.task.base import OFATask, TaskConfig
-from ofasys.templates import TaskTemplates
 from ofasys.utils import checkpoint_utils
 
 logger = logging.getLogger(__name__)
 
 
 class OFASys(nn.Module):
-    def __init__(self, task, cfg, model, seed=42):
+    def __init__(self, tasks, cfg, model, task_name=None, seed=42):
         """OFASys provides an easy-to-use inferface that allows users to load ckpt
         and use different instructions for inference.
 
@@ -40,15 +40,18 @@ class OFASys(nn.Module):
             Call ``from_pretrained`` instead.
 
         Args:
-            task: OFATask as default.
+            tasks: the list of tasks.
             cfg: configuration object.
             model: model object.
+            task_name: if not None, use specified task, rather than OFATask.
             seed: random seed.
         """
         super().__init__()
         self.cfg = cfg
-        self.task = task
+        self.tasks = tasks
         self.model = model
+        self.default_task = tasks[task_name] if task_name is not None and task_name in self.tasks else tasks["default"]
+        self.current_task = None
         OFATask._model = model
         np.random.seed(seed)
         utils.set_torch_seed(seed)
@@ -104,12 +107,16 @@ class OFASys(nn.Module):
     def from_pretrained(
         cls,
         model_path,
+        task_name=None,
+        initialize_all_tasks=False,
     ):
         """
         Load pretrained OFASys ckpt and config from the given path.
 
         args:
             model_path: pretrained ckpt path.
+            task_name: if not None, the specified task will be used, rather than OFATask.
+            initialize_all_tasks: if True, all pretraining tasks will be initialized.
 
         Returns:
             OFASys:
@@ -119,16 +126,30 @@ class OFASys(nn.Module):
         upgrade_state_dict(state)
         cfg = state["cfg"]
 
+        tasks = {}
         global_dict = Dictionary()
         task_cfg_default = TaskConfig()
-        for task_name, task_dict in state['configstore']['task'].items():
+        
+        if len(state['configstore']['task']) == 1:
+            task_name, task_dict = list(state['configstore']['task'].items())[0]
             node = ConfigStore().get("ofasys.task", task_name)
             task_cfg = from_dict(data_class=node.config.__class__, data=task_dict, config=Config(cast=[Enum]))
-            update_preprocess_cfg_by_another_cfg(task_cfg_default.preprocess, task_cfg.preprocess)
-
-        task = OFATask(task_cfg_default)
-        task.initialize(global_dict, is_train=False)
-
+            task_name = taskname_alias.get(task_name, task_name)
+            tasks[task_name] = node.target(task_cfg)
+            tasks[task_name].initialize(global_dict, is_train=False)
+        else:
+            for cur_task, task_dict in state['configstore']['task'].items():
+                node = ConfigStore().get("ofasys.task", cur_task)
+                task_cfg = from_dict(data_class=node.config.__class__, data=task_dict, config=Config(cast=[Enum]))
+                update_preprocess_cfg_by_another_cfg(task_cfg_default.preprocess, task_cfg.preprocess)
+                cur_task = taskname_alias.get(cur_task, cur_task)
+                if initialize_all_tasks or (task_name is not None and task_name == cur_task):
+                    tasks[cur_task] = node.target(task_cfg)
+                    tasks[cur_task].initialize(global_dict, is_train=False)
+    
+            tasks['default'] = OFATask(task_cfg_default)
+            tasks['default'].initialize(global_dict, is_train=False)
+    
         model_name, model_dict = list(state["configstore"]["model"].items())[0]
         node = ConfigStore().get("ofasys.model", model_name)
         model_cfg = from_dict(data_class=node.config.__class__, data=model_dict, config=Config(cast=[Enum]))
@@ -137,23 +158,23 @@ class OFASys(nn.Module):
         model.initialize(global_dict)
         model.load_state_dict(state["model"], strict=True, model_cfg=model_cfg)
 
-        return cls(task, cfg, model)
+        return cls(tasks, cfg, model, task_name=task_name)
 
     def __call__(
         self,
-        instructions_or_templates: Union[str, TaskTemplates, Instruction, List[Union[str, Instruction]]],
+        instructions_or_tasks: Union[str, Instruction, List[Union[str, Instruction]]],
         data: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         closed_set: Optional[Dict[str, Any]] = None,
         batch_size: int = 1,
         **gen_kwargs,
     ):
         return self.inference(
-            instructions_or_templates, data=data, closed_set=closed_set, batch_size=batch_size, **gen_kwargs
+            instructions_or_tasks, data=data, closed_set=closed_set, batch_size=batch_size, **gen_kwargs
         )
 
     def inference(
         self,
-        instructions_or_templates: Union[str, TaskTemplates, Instruction, List[Union[str, Instruction]]],
+        instructions_or_tasks: Union[str, Instruction, List[Union[str, Instruction]]],
         data: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         closed_set: Optional[Dict[str, Any]] = None,
         batch_size: int = 1,
@@ -169,7 +190,6 @@ class OFASys(nn.Module):
         no_repeat_ngram_size: Optional[int] = None,
         return_n_best: Optional[int] = None,
         max_iter: Optional[int] = None,  # for speech generator
-        output_shape: Optional[Tuple[int, ...]] = None,  # for motion diffusion generator
         **extra_gen_kwargs,
     ):
         """
@@ -178,7 +198,7 @@ class OFASys(nn.Module):
         Single sample or list of samples are both supported.
 
         Args:
-            instructions_or_templates: formatted instruction object ,or template string ,or List of them.
+            instructions_or_tasks: formatted instruction object, or template string, or task name, or List of them.
             data: data to fill in slots in instrcution.
             closed_set: perform a constraint generation on the given candidates set (default: None).
             batch_size: batch size of data (default: 1).
@@ -196,10 +216,7 @@ class OFASys(nn.Module):
             no_repeat_ngram_size: prevent decoding of ngrams that have already appeared (default: 3).
             return_n_best: return best n results (default: -1, which indicates beam_size)
             max_iter: max iteration steps for SpeechGenerator (default: 1500).
-            eos_prob_threshold: threshold for generating end of sequence (default: 0.5).
             output_shape: output shape for DiffusionGenerator (default: None).
-
-
         """
         gen_kwargs = extra_gen_kwargs
         user_gen_kwargs = {
@@ -217,40 +234,45 @@ class OFASys(nn.Module):
             "return_n_best": return_n_best,
             # for speech generator
             "max_iter": max_iter,
-            # for motion diffusion generator
-            "output_shape": output_shape,
         }
         user_gen_kwargs = dict(filter(lambda x: x[1], user_gen_kwargs.items()))
         gen_kwargs.update(user_gen_kwargs)
 
-        is_list = isinstance(instructions_or_templates, list) or isinstance(data, list)
+        is_list = isinstance(instructions_or_tasks, list) or isinstance(data, list)
         if is_list:
             return self.inference_multi(
-                instructions_or_templates, data=data, closed_set=closed_set, batch_size=batch_size, **gen_kwargs
+                instructions_or_tasks, data=data, closed_set=closed_set, batch_size=batch_size, **gen_kwargs
             )
         else:
-            return self.inference_single(instructions_or_templates, data=data, closed_set=closed_set, **gen_kwargs)
+            return self.inference_single(instructions_or_tasks, data=data, closed_set=closed_set, **gen_kwargs)
+
+    @property
+    def task(self):
+        if self.current_task is None:
+            return self.default_task
+        return self.current_task
+
+    @task.setter
+    def task(self, cur_task):
+        self.current_task = cur_task
 
     def build_instruction(
         self,
-        instructions_or_templates: Union[str, TaskTemplates, Instruction],
+        instruction_or_template: Union[str, Instruction],
         data: Optional[Dict[str, Any]] = None,
         split: str = 'test',
     ):
         """
         Fill template with input data.
         """
-        if isinstance(instructions_or_templates, TaskTemplates):
-            instructions_or_templates = instructions_or_templates.value
-
-        if isinstance(instructions_or_templates, str):
-            instructions_or_templates = Instruction(instructions_or_templates, split=split)
-        assert instructions_or_templates.split == split, f"instructions_or_templates.split must be {split}"
+        if isinstance(instruction_or_template, str):
+            instruction_or_template = Instruction(instruction_or_template, split=split)
+        assert instruction_or_template.split == split, f"instruction_or_template.split must be {split}"
         if data is None:
             data = {}
         else:
             data = self.task.preprocess(data, split)
-        return instructions_or_templates.format(**data)
+        return instruction_or_template.format(**data)
 
     def build_sample(self, instructions: Union[Instruction, List[Instruction]]):
         """
@@ -311,12 +333,23 @@ class OFASys(nn.Module):
 
     def inference_single(
         self,
-        instructions_or_templates: Union[str, TaskTemplates, Instruction],
+        instruction_or_task: Union[str, Instruction],
         data: Optional[Dict[str, Any]] = None,
         closed_set: Optional[Dict[str, Any]] = None,
         **gen_kwargs,
     ):
-        instruction = self.build_instruction(instructions_or_templates, data, split='test')
+        if (
+            isinstance(instruction_or_task, str)
+            and instruction_or_task != "default"
+            and instruction_or_task in self.tasks
+        ):
+            self.task = self.tasks[instruction_or_task]
+            instruction_or_template = self.task.templates[0]
+        else:
+            self.task = self.default_task
+            instruction_or_template = instruction_or_task
+
+        instruction = self.build_instruction(instruction_or_template, data, split='test')
         self.prepare_for_generation(instruction, closed_set, **gen_kwargs)
         sample = self.build_sample(instruction)
         outputs = self.task.inference(self.model, sample)
@@ -324,27 +357,37 @@ class OFASys(nn.Module):
 
     def inference_multi(
         self,
-        instructions_or_templates: Union[str, TaskTemplates, Instruction, List[Union[str, Instruction]]],
+        instructions_or_tasks: Union[str, Instruction, List[Union[str, Instruction]]],
         data: Optional[List[Dict[str, Any]]] = None,
         closed_set: Optional[Dict[str, Any]] = None,
         batch_size: int = 1,
         **gen_kwargs,
     ):
-        if isinstance(instructions_or_templates, list):
+        if isinstance(instructions_or_tasks, list):
             if data is None:
                 return [
-                    self.inference_single(item, closed_set=closed_set, **gen_kwargs)
-                    for item in instructions_or_templates
+                    self.inference_single(item, closed_set=closed_set, **gen_kwargs) for item in instructions_or_tasks
                 ]
             else:
-                assert len(instructions_or_templates) == len(
+                assert len(instructions_or_tasks) == len(
                     data
                 ), "The length of `instructions_or_templates` and `data` must match."
                 return [
                     self.inference_single(item, data_item, closed_set=closed_set, **gen_kwargs)
-                    for item, data_item in zip(instructions_or_templates, data)
+                    for item, data_item in zip(instructions_or_tasks, data)
                 ]
         else:
+            if (
+                isinstance(instructions_or_tasks, str)
+                and instructions_or_tasks != "default"
+                and instructions_or_tasks in self.tasks
+            ):
+                self.task = self.tasks[instructions_or_tasks]
+                instructions_or_templates = self.task.templates[0]
+            else:
+                self.task = self.default_task
+                instructions_or_templates = instructions_or_tasks
+
             instructions = [
                 self.build_instruction(instructions_or_templates, data_item, split='test') for data_item in data
             ]
@@ -364,8 +407,17 @@ class OFASys(nn.Module):
                 sample = self.build_sample(batch)
                 outputs = self.task.inference(self.model, sample)
                 total_outputs.extend(outputs)
-
             return total_outputs
+
+
+# TODO: change it in ofasys/task/xxx.py
+taskname_alias = {
+    'gigaword': 'text_summary',
+    'refcoco': 'image_grounding',
+    'dart': 'table2text',
+    'snli_ve': 'text_entailment',
+    'diffusion': 'motion_diffusion',
+}
 
 
 def upgrade_state_dict(state):
@@ -416,4 +468,13 @@ def update_preprocess_cfg_by_another_cfg(tgt_cfg: PreprocessConfig, src_cfg: Pre
             continue
         if getattr(src_cfg, pre_name).is_active:
             setattr(getattr(tgt_cfg, pre_name), 'is_active', True)
+        # src_pre_cfg = getattr(src_cfg, pre_name)
+        # tgt_pre_cfg = getattr(tgt_cfg, pre_name)
+        #
+        # if src_pre_cfg.is_active:
+        #     if not tgt_pre_cfg.is_active:
+        #         tgt_pre_cfg = from_dict(
+        #             data_class=tgt_pre_cfg.__class__, data=asdict(src_pre_cfg), config=Config(cast=[Enum])
+        #         )
+        #         setattr(tgt_cfg, pre_name, tgt_pre_cfg)
     return

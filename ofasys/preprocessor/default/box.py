@@ -14,9 +14,9 @@ from ofasys.utils import transforms as T
 
 from ..dictionary import Dictionary
 from ..instruction import Instruction, Slot
-from ..utils import collate_tokens
-from .base import CollateOutput, PreprocessConfig, SafeBasePreprocess
+from .base import PreprocessConfig, SafeBasePreprocess
 from .image import load_image
+from .text import DefaultTextPreprocess
 
 
 @dataclass
@@ -34,9 +34,9 @@ class BoxPreprocessConfig(PreprocessConfig):
 
 
 @register_config("ofasys.preprocess", "box", BoxPreprocessConfig)
-class DefaultBoxPreprocess(SafeBasePreprocess):
+class DefaultBoxPreprocess(DefaultTextPreprocess):
     def __init__(self, global_dict: Dictionary, cfg: BoxPreprocessConfig):
-        super().__init__(global_dict, cfg, ModalityType.BOX)
+        SafeBasePreprocess.__init__(self, global_dict, cfg, ModalityType.BOX)
         self.num_bins = cfg.box_dict_size
         self.max_image_size = cfg.max_image_size
         for i in range(self.num_bins):
@@ -66,10 +66,6 @@ class DefaultBoxPreprocess(SafeBasePreprocess):
 
         image_slot = _fetch_modal(ModalityType.IMAGE)[0]
         box_slot = _fetch_modal(ModalityType.BOX)[0]
-
-        # TODO:remove this after triming tasks of grounding_caption & object_detection
-        if box_slot.value is not None and not isinstance(box_slot.value, str):
-            return ist_data
 
         assert image_slot.get_attr('preprocess') is None, (
             f'{self.__class__.__name__} will transform the image and bounding box cooperatively, '
@@ -103,7 +99,6 @@ class DefaultBoxPreprocess(SafeBasePreprocess):
         return ist_data
 
     def map(self, slot: Slot) -> Slot:
-        super().map(slot)
         patch_boxes = slot.value
         quant_x0 = "<bin>_{}".format(int((patch_boxes[0][0] / self.max_image_size * (self.num_bins - 1)).round()))
         quant_y0 = "<bin>_{}".format(int((patch_boxes[0][1] / self.max_image_size * (self.num_bins - 1)).round()))
@@ -111,10 +106,6 @@ class DefaultBoxPreprocess(SafeBasePreprocess):
         quant_y1 = "<bin>_{}".format(int((patch_boxes[0][3] / self.max_image_size * (self.num_bins - 1)).round()))
         region_coord = "{} {} {} {}".format(quant_x0, quant_y0, quant_x1, quant_y1)
         tokens = self.encode(region_coord)
-        if slot.has_attr('add_bos'):
-            tokens = torch.cat([torch.LongTensor([self.global_dict.bos()]), tokens])
-        if slot.has_attr('add_eos'):
-            tokens = torch.cat([tokens, torch.LongTensor([self.global_dict.eos()])])
         slot.value = tokens
         return slot
 
@@ -132,51 +123,21 @@ class DefaultBoxPreprocess(SafeBasePreprocess):
         region_coord[1::2] /= h_resize_ratio
         return region_coord
 
-    def collate(self, slots: List[Slot]) -> CollateOutput:
-        """
-        Inputs:
-            samples: List of Tensors after preprocess
+    def postprocess(self, outputs, **sample):
+        def process_fn(idx: int, output):
+            if "__preprocess_decode_kwargs__" in sample:
+                decode_kwargs = sample["__preprocess_decode_kwargs__"][idx]
+            else:
+                decode_kwargs = {}
+            output.box = self.decode(output.tokens, **decode_kwargs)
 
-        Returns:
-            dict:
-                src_tokens (Tensor): batched tokens with shape `[batch, seq_len]`
-        """
-        super().collate(slots)
-        slots[0].value = collate_tokens(
-            [slot.value for slot in slots],
-            pad_idx=self.global_dict.pad(),
-            eos_idx=self.global_dict.eos(),
-        )
-        slot = slots[0]
-        if slot.is_src:
-            return CollateOutput(slot)
-        else:
-            input_slot = Slot(
-                slot.modality,
-                slot.is_src,
-                slot.value[:, :-1],
-                slot.global_position,
-                slot.column_name,
-                slot.attributes,
-                None,
-            )
-            target_slot = Slot(
-                slot.modality,
-                slot.is_src,
-                slot.value[:, 1:],
-                slot.global_position,
-                slot.column_name,
-                slot.attributes,
-                None,
-            )
+            if "raw_image" in sample:
+                output.image = sample["raw_image"][idx]
 
-            # for lagecy compatible
-            ntokens = target_slot.value.ne(self.global_dict.pad()).long().sum().item()
-            extra_dict = {
-                "target": target_slot.value,
-                "ntokens": ntokens,
-            }
-            return CollateOutput(input_slot, target_slot, extra_dict)
-
-    def __call__(self, x):
-        raise NotImplementedError
+        for idx, single_output in enumerate(outputs):
+            if isinstance(single_output, List):
+                for sub_output in single_output:
+                    process_fn(idx, sub_output)
+            else:
+                process_fn(idx, single_output)
+        return outputs

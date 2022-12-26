@@ -25,10 +25,13 @@ class OssLineReader(BaseReader):
             )
         if not oss_exists(file_path):
             raise ValueError('OSS file {} not exists!'.format(file_path))
-        cache_path = os.path.join(
-            os.path.dirname(file_path),
-            '.' + os.path.basename(file_path) + '.cache',
-        )
+
+        # check cache file: from oss://xxx/yy.tsv?host=zz to oss://xxx/.yy.tsv.cache?host=zz
+        basename = os.path.basename(file_path)
+        basename = basename.split('?')
+        basename[0] = '.' + basename[0] + '.cache'
+        basename = '?'.join(basename)
+        cache_path = os.path.join(os.path.dirname(file_path), basename)
         if not oss_exists(cache_path):
             raise ValueError('OSS file {} not exists!'.format(cache_path))
 
@@ -140,7 +143,7 @@ class OssTextBinReader(BaseReader):
         data = np.frombuffer(data, dtype=np.uint16)
         data = data.astype(np.int32)
         self.cur_pos += 1
-        return {self.column2alias[0]: data}
+        return {self.column2alias['text']: data}
 
     def is_eof(self):
         return self.cur_pos >= len(self)

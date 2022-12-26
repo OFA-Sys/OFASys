@@ -133,6 +133,10 @@ class Solved_acc(BaseMetric):
 
 
 def transfertxt2sudoku(txt):
+    if isinstance(txt, list) and len(txt) == 9:
+        # it has already been a sudoku list
+        sudokus = [list(map(int, t_)) for t_ in txt]
+        return sudokus
     sudokus = txt.split(" | ")
     sudokus = [list(map(int, su_.split(" : "))) for su_ in sudokus]
     return sudokus
@@ -150,11 +154,11 @@ def sudoku_evaluate(outputs, inputs, labels):
 
 
 def each_sudoku_evaluate(input, output, label):
-    if isinstance(output, list):
+    if isinstance(output, list) and len(output) == 1:
         output = output[0]
-    if isinstance(input, list):
+    if isinstance(input, list) and len(input) == 1:
         input = input[0]
-    if isinstance(label, list):
+    if isinstance(label, list) and len(label) == 1:
         label = label[0]
     if not is_generate_form_right(output):
         print("False output", output)

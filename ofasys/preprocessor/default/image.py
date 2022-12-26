@@ -16,6 +16,7 @@ from torchvision import transforms
 
 from ofasys.configure import register_config
 from ofasys.utils.oss import oss_get
+from ofasys.utils.transforms import RandomResize
 from ofasys.utils.vision_helper import RandomAugment
 
 from ..instruction import ModalityType, Slot
@@ -183,4 +184,38 @@ class ImagenetImagePreprocess(DefaultImagePreprocess):
                 ),
             ]
             + self.train_transform.transforms[3:]
+        )
+
+
+@register_config("ofasys.preprocess", "imagepretrain", ImagePreprocessConfig)
+class ImagePretrainImagePreprocess(DefaultImagePreprocess):
+    def __init__(self, global_dict, cfg: ImagePreprocessConfig):
+        super().__init__(global_dict, cfg)
+        max_range = int(self.patch_image_size * 1.5) + 1
+        scales = np.arange(self.patch_image_size, max_range).tolist()
+
+        self.train_transform = transforms.Compose(
+            [
+                RandomResize(scales, max_size=672),
+                transforms.CenterCrop(self.patch_image_size),
+                RandomAugment(
+                    2,
+                    7,
+                    isPIL=True,
+                    augs=[
+                        'Identity',
+                        'AutoContrast',
+                        'Equalize',
+                        'Brightness',
+                        'Sharpness',
+                        'ShearX',
+                        'ShearY',
+                        'TranslateX',
+                        'TranslateY',
+                        'Rotate',
+                    ],
+                ),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
         )

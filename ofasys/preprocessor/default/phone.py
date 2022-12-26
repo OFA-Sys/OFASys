@@ -41,9 +41,10 @@ class DefaultPhonePreprocess(SafeBasePreprocess):
     def add_dict_phone_tokens(self):
         self.global_dict.add_symbol("<phone>_dict_begin")
         local_phone_dict_file = cached_path(self.cfg.phone_dict_file)
-        for line in open(Path(local_phone_dict_file), "r"):
-            line = line.strip().split(" ")[0]
-            self.global_dict.add_symbol("<phone>_{}".format(line))
+        with open(Path(local_phone_dict_file), "r") as f:
+            for line in f:
+                line = line.strip().split(" ")[0]
+                self.global_dict.add_symbol("<phone>_{}".format(line))
         self.global_dict.add_symbol("<phone>_unk")
         self.global_dict.add_symbol("<phone>_dict_end")
         self.dict_phone_start = self.global_dict.index("<phone>_dict_begin") + 1  # not counting '<phone>_dict_begin'
@@ -71,10 +72,9 @@ class DefaultPhonePreprocess(SafeBasePreprocess):
             tokens = torch.tensor(tokens)
             tokens = self._add_noise(tokens, p=slot.get_attr('mask_ratio', float))
 
-        if slot.has_attr('add_bos'):
-            tokens = torch.cat([torch.LongTensor([self.global_dict.bos()]), tokens])
-        if slot.has_attr('add_eos'):
-            tokens = torch.cat([tokens, torch.LongTensor([self.global_dict.eos()])])
+        tokens = torch.cat(
+            [torch.LongTensor([self.global_dict.bos()]), tokens, torch.LongTensor([self.global_dict.eos()])]
+        )
         slot.value = tokens
         return slot
 
@@ -114,6 +114,15 @@ class DefaultPhonePreprocess(SafeBasePreprocess):
 
         return s
 
+    def postprocess(self, outputs, **sample):
+        for idx, single_output in enumerate(outputs):
+            if isinstance(single_output, List):
+                for sub_output in single_output:
+                    sub_output.text = self.decode(sub_output.tokens)
+            else:
+                single_output.text = self.decode(single_output.tokens)
+        return outputs
+
     def collate(self, slots: List[Slot]) -> CollateOutput:
         """
         Inputs:
@@ -139,10 +148,10 @@ class DefaultPhonePreprocess(SafeBasePreprocess):
         else:
             input_slot, target_slot = copy.copy(slots[0]), copy.copy(slots[0])
             for slot in slots:
-                slot.value['prev_output_tokens'] = slot.value['inputs'][:-1]
+                slot.value['prev_output_tokens'] = slot.value['inputs'][:-1]  # skip <EOS>
             input_slot.value = _collate('prev_output_tokens')
             for slot in slots:
-                slot.value['target'] = slot.value['target'][1:]
+                slot.value['target'] = slot.value['target'][1:]  # skip <BOS>
             target_slot.value = _collate('target')
 
             # for lagecy compatible

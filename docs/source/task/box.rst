@@ -21,14 +21,14 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[IMAGE:img] which region does the text "[TEXT:cap]" describe? -> [BOX:patch_boxes,add_bos,add_eos]
+		[IMAGE:img] which region does the text "[TEXT:cap]" describe? -> [BOX:patch_boxes]
 
 Usage
 ^^^^^^^^^^^^^^^^^^^^
 
 .. code:: python
 
-    >>> instruction = '[IMAGE:img] <BOS> which region does the text " [TEXT:cap] " describe? <EOS> -> [BOX:patch_boxes,add_bos,add_eos]'
+    >>> instruction = '[IMAGE:img] which region does the text " [TEXT:cap] " describe? -> [BOX:patch_boxes]'
     >>> data = {'img': "https://www.2008php.com/2014_Website_appreciate/2015-06-22/20150622131649.jpg", 'cap': 'hand'}
     >>> output = model.inference(instruction, data=data)
     >>> output.save_box('0.jpg')
@@ -61,7 +61,7 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[IMAGE:img] <BOS> what does the region describe? region: [BOX:patch_boxes] <EOS> -> <BOS> [TEXT:cap] <EOS>
+		[IMAGE:img] what does the region describe? region: [BOX:patch_boxes] -> [TEXT:cap]
 
 
 .. _od:
@@ -79,5 +79,5 @@ Default Template
 ^^^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[IMAGE:img] <BOS> what are the objects in the image? <EOS> -> <BOS>( [BOX] [TEXT])* <EOS>
+		[IMAGE:img] what are the objects in the image? -> ( [BOX] [TEXT])*
 

@@ -16,14 +16,14 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[VIDEO:video] <BOS> what is in the video?  <EOS> -> <BOS> [TEXT:label_name,closed_set] <EOS>
+		[VIDEO:video] what is in the video? -> [TEXT:label_name,closed_set]
 
 Usage
 ^^^^^^^^^^^^^^^^^^^^
 
 .. code:: python
 
-    >>> instruction = '[VIDEO:video] <BOS> what is in the video?  <EOS> -> <BOS> [TEXT:label_name,closed_set] <EOS>'
+    >>> instruction = '[VIDEO:video] what is in the video? -> [TEXT:label_name,closed_set]'
     >>> data = {'video': 'oss://ofasys/datasets/kinetics_data/k400.256p/test/-7aeB7vFtB4_000037_000047.mp4'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)
@@ -56,14 +56,14 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[VIDEO:video] <BOS> what does the video describe? <EOS> -> <BOS> [TEXT:cap] <EOS>
+		[VIDEO:video] what does the video describe? -> [TEXT:cap]
 
 Usage
 ^^^^^^^^^^^^^^^^^^^^
 
 .. code:: python
 
-    >>> instruction = '[VIDEO:video] <BOS> what does the video describe? <EOS> -> <BOS> [TEXT:cap]'
+    >>> instruction = '[VIDEO:video] what does the video describe? -> [TEXT:cap]'
     >>> data = {'video': 'oss://ofasys/datasets/msrvtt_data/videos/video7030.mp4'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)
@@ -97,14 +97,14 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-    [VIDEO:video] <BOS> [TEXT:question] <EOS> -> <BOS> [TEXT:answer,is_label] <EOS>
+    [VIDEO:video] [TEXT:question] -> [TEXT:answer,is_label]
   
 Usage
 ^^^^^^^^^^^^^^^^^^^^
 
 .. code:: python
 
-    >>> instruction = '[VIDEO:video] <BOS> [TEXT:question] <EOS> -> <BOS> [TEXT:answer,is_label] <EOS>'
+    >>> instruction = '[VIDEO:video] [TEXT:question] -> [TEXT:answer,is_label]'
     >>> data = {'video': 'oss://ofasys/datasets/msrvtt_data/videos/video9585.mp4', 'question': 'what is a person decorating?'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)

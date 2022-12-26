@@ -131,6 +131,7 @@ class TransformerEncoder(BaseEncoder):
                 encoder_padding_mask=adaptor_output.masks if has_pad else None,
                 self_attn_bias=self_attn_bias,
                 need_attn=return_all_attention_weights,
+                modal_mask=adaptor_output.modal_mask,
             )
             if return_all_hiddens:
                 assert encoder_states is not None
@@ -201,20 +202,6 @@ class TransformerEncoder(BaseEncoder):
             return self.max_source_positions
         return self.max_source_positions
 
-    def upgrade_state_dict_named(self, state_dict, name):
-        """Upgrade a (possibly old) state dict for new versions of ofa."""
-        for i, layer in enumerate(self.layers):
-            # update layer norms
-            layer.upgrade_state_dict_named(state_dict, "{}.layers.{}".format(name, i))
-        # self.adaptor.upgrade_state_dict_named(state_dict, "{}.adaptor".format(name))
-        prefix = name + "." if name != "" else ""
-        for param_name, param_tensor in self.state_dict().items():
-            if (prefix + param_name) not in state_dict:
-                state_dict[prefix + param_name] = self.state_dict()[param_name]
-                logger.info('not found in checkpoint: %s%s' % (prefix, param_name))
-
-        return state_dict
-
 
 class TransformerDecoder(IncrementalDecoder):
     """
@@ -248,7 +235,7 @@ class TransformerDecoder(IncrementalDecoder):
 
         embed_dim = cfg.decoder_embed_dim
         self.embed_dim = embed_dim
-        self.output_embed_dim = cfg.decoder_output_dim
+        self.output_embed_dim = int(cfg.decoder_output_dim)
         if self.cfg.use_self_attn_bias:
             self.cross_pos_q_linear = nn.Linear(embed_dim, embed_dim)
             self.cross_pos_k_linear = nn.Linear(embed_dim, embed_dim)
@@ -500,6 +487,7 @@ class TransformerDecoder(IncrementalDecoder):
                 need_head_weights=bool((idx == alignment_layer)),
                 self_attn_bias=self_attn_bias,
                 cross_attn_bias=cross_abs_pos_bias,
+                modal_mask=adaptor_output.modal_mask,
             )
 
             if return_all_attention_weights:
@@ -549,18 +537,3 @@ class TransformerDecoder(IncrementalDecoder):
             self._future_mask = torch.triu(utils.fill_with_neg_inf(torch.zeros([dim, dim])), 1)
         self._future_mask = self._future_mask.to(tensor)
         return self._future_mask[:dim, :dim]
-
-    def upgrade_state_dict_named(self, state_dict, name):
-        """Upgrade a (possibly old) state dict for new versions of OFA."""
-
-        for i in range(self.num_layers):
-            # update layer norms
-            self.layers[i].upgrade_state_dict_named(state_dict, "{}.layers.{}".format(name, i))
-        # self.adaptor.upgrade_state_dict_named(state_dict, "{}.adaptor".format(name))
-        prefix = name + "." if name != "" else ""
-        for param_name, param_tensor in self.state_dict().items():
-            if (prefix + param_name) not in state_dict:
-                state_dict[prefix + param_name] = self.state_dict()[param_name]
-                logger.info('not found in checkpoint: %s%s' % (prefix, param_name))
-
-        return state_dict

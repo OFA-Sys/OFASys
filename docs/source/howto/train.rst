@@ -23,7 +23,7 @@ in the scripts directory and fill in the following configuration:
     task:
         image_classify:
             instruction:
-                template: '[IMAGE:image,preprocess=imagenet] <BOS> what does the image describe? <EOS> -> <BOS> [TEXT:label_name,closed_set] <EOS>'
+                template: '[IMAGE:image,preprocess=imagenet] what does the image describe? -> [TEXT:label_name,closed_set]'
 
             dataset:
                 num_workers: 8

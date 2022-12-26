@@ -39,3 +39,30 @@ class CaptionTask(OFATask):
             else:
                 multi_hyps.text = remove_punctuation(multi_hyps.text).strip()
         return hyps
+
+
+@register_config("ofasys.task", "pretrain_caption", dataclass=TaskConfig)
+class PretrainCaptionTask(OFATask):
+    def __init__(self, cfg: TaskConfig):
+        super().__init__(cfg)
+
+    def preprocess(self, data: Dict[str, Any], split: str) -> Dict[str, Any]:
+        if split == 'test':
+            data['cap'] = 'dummy'
+            return data
+        caption = data['cap'].lower()
+
+        caption = caption.strip()
+        caption_token_list = caption.strip().split()
+        caption = ' '.join(caption_token_list[:self.cfg.max_tgt_length])
+
+        if len(caption) == 0:
+            return None
+
+        data['cap'] = caption
+        return data
+
+    def inference(self, model, samples):
+        hyps = super().inference(model, samples)
+        hyps = [remove_punctuation(hyp).strip() for hyp in hyps]
+        return hyps

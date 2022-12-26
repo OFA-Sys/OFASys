@@ -10,14 +10,30 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from typing import List, Union
 
-import av
 import requests
 import torch
 from torchvision import transforms
 
-from ofasys.configure import register_config
 from ofasys.utils.logging_utils import master_logging
+
+_no_av_help = "No package `av` found, please install it by `pip install av` if you need to support video tasks"
+logger = logging.getLogger(__name__)
+try:
+    import av
+
+    _is_av_missing = 0
+except ImportError as _:
+    with master_logging():
+        logger.info(_no_av_help)
+    _is_av_missing = 1
+
+from ofasys.configure import register_config
 from ofasys.utils.oss import oss_get
+from ofasys.utils.video import decoder as decoder
+from ofasys.utils.video import transform as transform
+from ofasys.utils.video import utils as utils
+from ofasys.utils.video.random_erasing import RandomErasing
+from ofasys.utils.video.transform import create_random_augment
 
 from ..instruction import ModalityType, Slot
 from ..utils import base64decode
@@ -33,16 +49,6 @@ from .image import (
     IMAGENET_INCEPTION_MEAN,
     IMAGENET_INCEPTION_STD,
 )
-
-logger = logging.getLogger(__name__)
-
-import av
-
-from ofasys.utils.video import decoder as decoder
-from ofasys.utils.video import transform as transform
-from ofasys.utils.video import utils as utils
-from ofasys.utils.video.random_erasing import RandomErasing
-from ofasys.utils.video.transform import create_random_augment
 
 
 def video_tensor_normalize(tensor, mean, std, func=None):

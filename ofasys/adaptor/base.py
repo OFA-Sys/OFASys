@@ -38,6 +38,7 @@ class AdaptorOutput:
     masks: torch.BoolTensor  # B x T
     pos_embed: torch.FloatTensor  # B x T x H
     self_attn_bias: List[torch.FloatTensor]  # List[B x A x T x T]
+    modal_mask: torch.IntTensor = None  # B x T
 
     def __post_init__(self):
         assert self.embed is not None
@@ -102,12 +103,12 @@ class BaseAdaptorConfig(BaseDataclass):
 
 class BaseAdaptor(torch.nn.Module):
     def __init__(
-        self,
-        embed_tokens: Embedding,
-        dictionary: Dictionary,
-        is_src: bool,
-        general_adaptor,
-        cfg: BaseAdaptorConfig,
+            self,
+            embed_tokens: Embedding,
+            dictionary: Dictionary,
+            is_src: bool,
+            general_adaptor,
+            cfg: BaseAdaptorConfig,
     ):
         """
         IO Adaptors convert modality data between its tensor form that is represented by computer program and
@@ -120,7 +121,7 @@ class BaseAdaptor(torch.nn.Module):
             embed_tokens (Embedding): global embedding matrix.
             dictionary (Dictionary): global vocab.
             is_src (bool): where is the adaptor used for .
-            general_adaptor (GenearalAdaptor): instance of GeneralAdaptor.
+            general_adaptor (GeneralAdaptor): instance of GeneralAdaptor.
             cfg (BaseAdaptorConfig): adaptor config.
         """
         super().__init__()

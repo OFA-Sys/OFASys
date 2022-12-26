@@ -113,6 +113,10 @@ class DatasetConfig(BaseDataclass):
         default=1024,
         metadata={"help": "Length of text in TextBinReader"},
     )
+    interleaved_multiple_reader: bool = field(
+        default=False,
+        metadata={"help": "Use interleaved arrangement instead of concatenation when mixing multiple readers"},
+    )
 
 
 @dataclass
@@ -169,6 +173,11 @@ class TaskConfig(BaseDataclass):
         metadata={"help": 'generation args for Self-critical sequence training, as JSON string'},
     )
 
+    diffuser_args: str = field(
+        default='{"scheduler": "DDIMScheduler", "num_inference_steps": 50}',
+        metadata={"help": "args for the diffuser scheduler, as JSON string"},
+    )
+
     def update(self, **kwargs):
         if 'name' in kwargs:
             self._name = kwargs['name']
@@ -195,10 +204,12 @@ class OFATask:
         self.cfg = TaskConfig() if cfg is None else cfg
         self.cfg.update(**kwargs)
         self._generator = None
+        self.diffuser_args = json.loads(cfg.diffuser_args)  # accessed by the diffusion criterion and generator
 
         self.datasets = {}
         self.data_iterators: Dict[str, EpochBatchIterator] = {}
         self.templates = parse_template(self.cfg.instruction.template)
+        warning_for_bos_eos(self.templates)
         self.target_modality = self.infer_target_modality(self.templates[0]) if self.templates is not None else None
         self.target_preprocess = (
             self.infer_target_preprocess(self.templates[0]) if self.templates is not None else None
@@ -210,7 +221,8 @@ class OFATask:
             update_preprocess_config_by_template(self.cfg.preprocess, self.templates, self.name)
         self.general_preprocess = self.build_preprocess(self.cfg.preprocess, global_dict)
         self.metrics = self.build_metrics(self.cfg.evaluation.metrics)
-        self.criterion = self.build_criterion(self.cfg.criterion)
+        if kwargs.get('is_train', True):
+            self.criterion = self.build_criterion(self.cfg.criterion)
 
     @classmethod
     def upgrade_model_adaptor_cfg(cls, tasks, model_cfg):
@@ -548,21 +560,16 @@ class OFATask:
             eos_prob_threshold=gen_kwargs.pop("eos_prob_threshold", 0.5),
         )
 
-    def build_motion_diffusion_generator(self, **gen_kwargs):
-        diffuser_type = gen_kwargs.pop("diffuser_type", "ddpm")
-        stepwise_clamp = gen_kwargs.pop("stepwise_clamp", True)
-        output_shape = gen_kwargs.pop("output_shape", None)
+    def build_diffusion_generator(self, **gen_kwargs):
         return DiffusionGenerator(
-            self.general_preprocess.name2pre["motion_6d"],
-            diffuser_type=diffuser_type,
-            stepwise_clamp=stepwise_clamp,
-            output_shape=output_shape,
+            self.general_preprocess,
+            self.diffuser_args,
             **gen_kwargs,
         )
 
     def build_generator(self, target_modality, **gen_kwargs):
         if target_modality == ModalityType.MOTION:
-            return self.build_motion_diffusion_generator(**gen_kwargs)
+            return self.build_diffusion_generator(**gen_kwargs)
         elif target_modality == ModalityType.AUDIO:
             return self.build_speech_generator(**gen_kwargs)
         elif target_modality == ModalityType.TEXT:
@@ -571,7 +578,7 @@ class OFATask:
             assert gen_kwargs["min_len"] == 4 and gen_kwargs["max_len"] == 4
             return self.build_sequence_generator(**gen_kwargs)
         elif target_modality == ModalityType.IMAGE:
-            assert gen_kwargs["min_len"] == 1024 and gen_kwargs["max_len"] == 1024
+            assert gen_kwargs["min_len"] == gen_kwargs["max_len"]
             return self.build_sequence_generator(**gen_kwargs)
         else:
             raise NotImplementedError
@@ -649,6 +656,12 @@ class OFATask:
                         predict_results.append(multi_outputs[0].box)
                     else:
                         predict_results.append(multi_outputs.box)
+            elif self.target_modality == ModalityType.CATEGORY:
+                for multi_outputs in outputs:
+                    if isinstance(multi_outputs, List):
+                        predict_results.append(multi_outputs[0].text)
+                    else:
+                        predict_results.append(multi_outputs.text)
             else:
                 raise NotImplementedError
             return predict_results
@@ -731,26 +744,6 @@ class OFATask:
         outputs = self.postprocess(gen_outputs, target_slot=target_slot, **sample)
         return outputs
 
-    def postprocess_for_text(self, outputs: BatchGeneratorOutput, **sample):
-        preprocessor = self.general_preprocess.name2pre[self.target_preprocess]
-
-        def postprocess_fn(idx: int, output: SequenceGeneratorOutput):
-            if "prefix_tokens" in sample:
-                prefix_len = (
-                    sample["prefix_tokens"][idx].ne(self.target_dictionary.pad())
-                    * sample["prefix_tokens"][idx].ne(self.target_dictionary.eos())
-                ).sum()
-                output.tokens = output.tokens[prefix_len:]
-            output.text = preprocessor.decode(output.tokens)
-
-        for idx, single_output in enumerate(outputs):
-            if isinstance(single_output, List):
-                for sub_output in single_output:
-                    postprocess_fn(idx, sub_output)
-            else:
-                postprocess_fn(idx, single_output)
-        return outputs
-
     def postprocess_for_image_code(self, outputs: BatchGeneratorOutput, **sample):
         preprocessor = self.general_preprocess.name2pre["image_vqgan"]
         adaptor = OFATask._model.decoder.adaptor.name2adaptor["image_vqgan"]
@@ -780,58 +773,10 @@ class OFATask:
                 single_output.image = images[0]
         return outputs
 
-    def postprocess_for_box(self, outputs: BatchGeneratorOutput, **sample):
-        preprocessor = self.general_preprocess.name2pre["box"]
-
-        def postprocess_fn(idx: int, output: SequenceGeneratorOutput):
-            if "__preprocess_decode_kwargs__" in sample:
-                decode_kwargs = sample["__preprocess_decode_kwargs__"][idx]
-            else:
-                decode_kwargs = {}
-            output.box = preprocessor.decode(output.tokens, **decode_kwargs)
-
-            if "raw_image" in sample:
-                output.image = sample["raw_image"][idx]
-
-        for idx, single_output in enumerate(outputs):
-            if isinstance(single_output, List):
-                for sub_output in single_output:
-                    postprocess_fn(idx, sub_output)
-            else:
-                postprocess_fn(idx, single_output)
-        return outputs
-
-    def postprocess_for_audio(self, outputs: BatchGeneratorOutput, **sample):
-        preprocessor = self.general_preprocess.name2pre["audio"]
-
-        single_output: SpeechGeneratorOutput
-        for single_output in outputs:
-            single_output.waveform = preprocessor.decode(single_output.feature)
-            if single_output.targ_feature is not None:
-                single_output.targ_waveform = preprocessor.decode(single_output.targ_feature)
-        return outputs
-
-    def postprocess_for_motion(self, outputs: BatchGeneratorOutput, **sample):
-        preprocessor = self.general_preprocess.name2pre["motion_6d"]
-
-        single_output: MotionOutput
-        for single_output in outputs:
-            single_output.bvh = preprocessor.decode(single_output.feature)
-        return outputs
-
     def postprocess(self, outputs, target_slot: Slot, **sample):
-        if target_slot.modality == ModalityType.TEXT:
-            return self.postprocess_for_text(outputs, **sample)
-        elif target_slot.modality == ModalityType.IMAGE:
+        if target_slot.modality == ModalityType.IMAGE:
             return self.postprocess_for_image_code(outputs, **sample)
-        elif target_slot.modality == ModalityType.AUDIO:
-            return self.postprocess_for_audio(outputs, **sample)
-        elif target_slot.modality == ModalityType.BOX:
-            return self.postprocess_for_box(outputs, **sample)
-        elif target_slot.modality == ModalityType.MOTION:
-            return self.postprocess_for_motion(outputs, **sample)
-        else:
-            raise NotImplementedError
+        return self.general_preprocess.postprocess(outputs, **sample)
 
     def inference_step(self, generator, model, sample, **kwargs):
         """
@@ -921,6 +866,7 @@ def collect_adaptor_name_from_tasks(tasks: list) -> Set[str]:
 
 
 def update_preprocess_config_by_template(cfg: PreprocessConfig, templates: List[str], task_name):
+    assert templates is not None, f"{task_name}'s templates is None"
     all_preprocess_name = set()
     for template in templates:
         ist = Instruction(template)
@@ -934,3 +880,26 @@ def update_preprocess_config_by_template(cfg: PreprocessConfig, templates: List[
         else:
             setattr(getattr(cfg, pre_name), 'is_active', False)
     logger.info(f"Preprocess {'，'.join(all_preprocess_name)} of Task:{task_name} be activated!")
+
+
+def warning_for_bos_eos(templates: List[str]):
+    if templates is None:
+        return
+    att_warnings = set()
+    token_warnings = set()
+    for template in templates:
+        ist = Instruction(template)
+        for slot in ist.slots:
+            if slot.has_attr('add_bos'):
+                att_warnings.add('add_bos')
+            if slot.has_attr('add_eos'):
+                att_warnings.add('add_eos')
+            if isinstance(slot.value, str):
+                if '<BOS>' in slot.value:
+                    token_warnings.add('<BOS>')
+                if '<EOS>' in slot.value:
+                    token_warnings.add('<EOS>')
+    if att_warnings:
+        logger.warning(f"Attributs {', '.join(att_warnings)} will be ignored!")
+    if token_warnings:
+        logger.warning(f"Tokens {', '.join(token_warnings)} will be treated as plain text!")

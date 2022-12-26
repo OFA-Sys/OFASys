@@ -15,14 +15,14 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[AUDIO:wav] <BOS> what is the text corresponding to the voice? <EOS> -> [TEXT:text,preprocess=text_phone,add_bos,add_eos]
+		[AUDIO:wav] what is the text corresponding to the voice? -> [TEXT:text,preprocess=text_phone]
 
 Usage
 ^^^^^^^^^^^^^^^^^^^^
 
 .. code:: python
 
-    >>> instruction = '[AUDIO:wav] <BOS> what is the text corresponding to the voice? <EOS> -> [TEXT:text,preprocess=text_phone,add_bos,add_eos]'
+    >>> instruction = '[AUDIO:wav] what is the text corresponding to the voice? -> [TEXT:text,preprocess=text_phone]'
     >>> data = {'wav': 'oss://ofasys/data/librispeech/dev-clean/1272/128104/1272-128104-0001.flac'}
     >>> output = model.inference(instruction, data=data)
     >>> print(output.text)

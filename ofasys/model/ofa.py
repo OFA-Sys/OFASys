@@ -2,6 +2,7 @@
 # This source code is licensed under the Apache 2.0 license
 # found in the LICENSE file in the root directory.
 
+from abc import ABC, abstractmethod
 import logging
 import os
 from dataclasses import dataclass, field
@@ -9,18 +10,33 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
+from torch.nn import Module, ModuleDict
 
 from ofasys.adaptor.general import OFAAdaptorConfig
-from ofasys.configure import register_config
 from ofasys.distributed import fsdp_wrap
 from ofasys.module import TransformerConfig, init_bert_params, utils
-from ofasys.preprocessor import Dictionary, Slot
+from ofasys.preprocessor import Slot
 
 from .fairseq_model import FairseqEncoderDecoderModel
+from ofasys.configure import register_config, BaseDataclass
+from ofasys.module import utils
+from ofasys.model.base_decoder import BaseDecoder
+from ofasys.model.base_encoder import BaseEncoder
+from ofasys.model.fairseq_model import BaseModel, check_type
+from ofasys.module import init_bert_params, TransformerConfig
+from ofasys.model.decoders.pooling import OFAPoolingModel, OFAPoolingModelConfig
+from ofasys.preprocessor import Slot
+from ofasys.preprocessor.dictionary import Dictionary
 from .transformer import TransformerDecoder, TransformerEncoder
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class ExtraModelsConfig(BaseDataclass):
+    pooling: Dict[str, OFAPoolingModelConfig] = field(
+        default_factory=lambda: {},
+        metadata={"help": "Extra pooling models."},
+    )
 
 @dataclass
 class GeneralistModelConfig(TransformerConfig):
@@ -100,62 +116,55 @@ class GeneralistModelConfig(TransformerConfig):
         default=False,
         metadata={"help": "whether to share attn_bias cross transformer layers"},
     )
+    modal_ffn: bool = field(
+        default=False, metadata={"help": "use modal ffn"},
+    )
+    extra_models: ExtraModelsConfig = ExtraModelsConfig()
 
 
-@register_config("ofasys.model", "unify", dataclass=GeneralistModelConfig)
-class GeneralistModel(FairseqEncoderDecoderModel):
-    __jit_unused_properties__ = ["supported_targets"]
+class OFAExecutor(ABC):
+    @abstractmethod
+    def forward(
+        self,
+        ofa_model: 'GeneralistModel',
+        slots: List[Slot],
+        features_only: bool = False,
+        full_context_alignment: bool = False,
+        alignment_layer: Optional[int] = None,
+        alignment_heads: Optional[int] = None,
+        return_all_hiddens: bool = False,
+        return_encoder_out: bool = False,
+        return_hf_dict: bool = False,
+        return_all_attention_weights: bool = False,
+    ):
+        raise NotImplementedError
 
-    def __init__(self, cfg: GeneralistModelConfig = None):
-        if cfg is None:
-            cfg = GeneralistModelConfig.from_yaml(
-                os.path.join(
-                    os.path.dirname(__file__),
-                    '..',
-                    'config',
-                    'default_model.yaml',
-                )
-            )
-        self.cfg = cfg
+    @abstractmethod
+    def get_normalized_probs(
+        self,
+        ofa_model: 'GeneralistModel',
+        net_output: Tuple[Tensor, Optional[Dict[str, List[Optional[Tensor]]]]],
+        log_probs: bool,
+        sample: Optional[Dict[str, Tensor]] = None,
+    ):
+        raise NotImplementedError
 
-        if cfg.encoder_layers_to_keep:
-            cfg.encoder_layers = len(cfg.encoder_layers_to_keep.split(","))
-        if cfg.decoder_layers_to_keep:
-            cfg.decoder_layers = len(cfg.decoder_layers_to_keep.split(","))
-        if cfg.offload_activations:
-            cfg.checkpoint_activations = True  # offloading implies checkpointing
+    @abstractmethod
+    def forward_decoder(self, ofa_model: 'GeneralistModel', prev_output_tokens, **kwargs):
+        raise NotImplementedError
 
-        if cfg.arch:
-            arch_func = eval('ofa_arch_' + cfg.arch)
-            arch_func(cfg)
-
-    @classmethod
-    def from_yaml(cls, yaml_path):
-        return GeneralistModel(GeneralistModelConfig.from_yaml(yaml_path))
-
-    def initialize(self, global_dict: Dictionary):
-        encoder = TransformerEncoder(self.cfg, global_dict)
-        decoder = TransformerDecoder(self.cfg, global_dict, self.cfg.no_cross_attention)
-        if not self.cfg.share_all_embeddings:
-            # fsdp_wrap is a no-op when --ddp-backend != fully_sharded
-            encoder = fsdp_wrap(encoder, min_num_params=self.cfg.min_params_to_wrap)
-            decoder = fsdp_wrap(decoder, min_num_params=self.cfg.min_params_to_wrap)
-
-        super().__init__(encoder, decoder)
-        # We follow BERT's random weight initialization
-        self.apply(init_bert_params)
-
-        if self.cfg.freeze_encoder:
-            self.encoder.requires_grad_(False)
-
-        self.global_dict = global_dict
-
-    @property
-    def supported_targets(self):
-        return {"self"}
+class OFAEncoderDecoderExecutor(OFAExecutor):
+    def __init__(self,
+        encoder_name: str = 'transformer_encoder',
+        decoder_name: str = 'transformer_decoder'
+    ) -> None:
+        super().__init__()
+        self.encoder_name: str = encoder_name
+        self.decoder_name: str = decoder_name
 
     def forward(
         self,
+        ofa_model: 'GeneralistModel',
         slots: List[Slot],
         features_only: bool = False,
         full_context_alignment: bool = False,
@@ -226,13 +235,18 @@ class GeneralistModel(FairseqEncoderDecoderModel):
                   Only return if *return_all_hiddens* and *return_encoder_out* are both True.
 
         """
-        encoder_out = self.encoder(
+        encoder: BaseEncoder = ofa_model.get_model_by_name(self.encoder_name)
+        decoder: BaseDecoder = ofa_model.get_model_by_name(self.decoder_name)
+        assert isinstance(encoder, BaseEncoder)
+        assert isinstance(decoder, BaseDecoder)
+
+        encoder_out = encoder(
             list(filter(lambda slot: slot.is_src, slots)),
             return_all_hiddens=return_all_hiddens,
             return_all_attention_weights=return_all_attention_weights,
         )
 
-        decoder_out, decoder_extra_out = self.decoder(
+        decoder_out, decoder_extra_out = decoder(
             list(filter(lambda slot: not slot.is_src, slots)),
             encoder_out=encoder_out,
             features_only=features_only,
@@ -272,6 +286,7 @@ class GeneralistModel(FairseqEncoderDecoderModel):
 
     def get_normalized_probs(
         self,
+        ofa_model: 'GeneralistModel',
         net_output: Tuple[Tensor, Optional[Dict[str, List[Optional[Tensor]]]]],
         log_probs: bool,
         sample: Optional[Dict[str, Tensor]] = None,
@@ -289,8 +304,145 @@ class GeneralistModel(FairseqEncoderDecoderModel):
         else:
             return net_output[0]
 
+    def forward_decoder(self, ofa_model: 'GeneralistModel', prev_output_tokens, **kwargs):
+        encoder: BaseEncoder = ofa_model.get_model_by_name(self.encoder_name)
+        decoder: BaseDecoder = ofa_model.get_model_by_name(self.decoder_name)
+        assert isinstance(encoder, BaseEncoder)
+        assert isinstance(decoder, BaseDecoder)
+        return decoder(prev_output_tokens, **kwargs)
+
+class OFAExecutorContext(object):
+    def __init__(self, ofa_model: 'GeneralistModel', ofa_executor: OFAExecutor) -> None:
+        self.ofa_model: 'GeneralistModel' = ofa_model
+        self.ofa_executor: OFAExecutor = ofa_executor
+        self.previous_ofa_executor: OFAExecutor = self.ofa_model.get_active_executor()
+
+    def __enter__(self) -> 'OFAExecutorContext':
+        self.ofa_model.set_active_executor(self.ofa_executor)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.ofa_model.set_active_executor(self.previous_ofa_executor)
+
+
+@register_config("ofasys.model", "unify", dataclass=GeneralistModelConfig)
+class GeneralistModel(BaseModel):
+    __jit_unused_properties__ = ["supported_targets"]
+
+    def __init__(self, cfg: GeneralistModelConfig = None):
+        super().__init__()
+        if cfg is None:
+            cfg = GeneralistModelConfig.from_yaml(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    '..',
+                    'config',
+                    'default_model.yaml',
+                )
+            )
+        self.cfg = cfg
+
+        if cfg.encoder_layers_to_keep:
+            cfg.encoder_layers = len(cfg.encoder_layers_to_keep.split(","))
+        if cfg.decoder_layers_to_keep:
+            cfg.decoder_layers = len(cfg.decoder_layers_to_keep.split(","))
+        if cfg.offload_activations:
+            cfg.checkpoint_activations = True  # offloading implies checkpointing
+
+        if cfg.arch:
+            arch_func = eval('ofa_arch_' + cfg.arch)
+            arch_func(cfg)
+
+    @classmethod
+    def from_yaml(cls, yaml_path):
+        return GeneralistModel(GeneralistModelConfig.from_yaml(yaml_path))
+
+    def initialize(self, global_dict: Dictionary):
+        encoder = TransformerEncoder(self.cfg, global_dict)
+        decoder = TransformerDecoder(self.cfg, global_dict, self.cfg.no_cross_attention)
+        if not self.cfg.share_all_embeddings:
+            # fsdp_wrap is a no-op when --ddp-backend != fully_sharded
+            encoder = fsdp_wrap(encoder, min_num_params=self.cfg.min_params_to_wrap)
+            decoder = fsdp_wrap(decoder, min_num_params=self.cfg.min_params_to_wrap)
+
+        self.encoder = encoder
+        self.decoder = decoder
+        self.extra_models = ModuleDict()
+        for pooling_module_name, pooling_module_config in self.cfg.extra_models.pooling.items():
+            self.extra_models[pooling_module_name] = OFAPoolingModel(pooling_module_config, global_dict, decoder.adaptor)
+        self.active_executor: OFAExecutor = OFAEncoderDecoderExecutor()
+
+        check_type(self.encoder, BaseEncoder)
+        check_type(self.decoder, BaseDecoder)
+
+        # super().__init__(encoder, decoder)
+        # We follow BERT's random weight initialization
+        self.apply(init_bert_params)
+
+        if self.cfg.freeze_encoder:
+            self.encoder.requires_grad_(False)
+
+        self.global_dict = global_dict
+
+    @property
+    def supported_targets(self):
+        return {"self"}
+
+    def executor_context(self, executor) -> OFAExecutorContext:
+        return OFAExecutorContext(self, ofa_executor=executor)
+
+    def get_active_executor(self):
+        return self.active_executor
+
+    def set_active_executor(self, executor: OFAExecutor) -> None:
+        assert isinstance(executor, OFAExecutor)
+        self.active_executor = executor
+
+    def get_model_by_name(self, model_name: str) -> Module:
+        # Hard-coded names for backward-compatibility
+        if model_name == 'transformer_encoder':
+            return self.encoder
+        if model_name == 'transformer_decoder':
+            return self.decoder
+        assert model_name in self.extra_models, 'Warning!! ' + model_name
+        return self.extra_models[model_name]
+
+    def forward(
+        self,
+        slots: List[Slot],
+        features_only: bool = False,
+        full_context_alignment: bool = False,
+        alignment_layer: Optional[int] = None,
+        alignment_heads: Optional[int] = None,
+        return_all_hiddens: bool = False,
+        return_encoder_out: bool = False,
+        return_hf_dict: bool = False,
+        return_all_attention_weights: bool = False,
+    ):
+        return self.active_executor.forward(
+            self,
+            slots=slots,
+            features_only=features_only,
+            full_context_alignment=full_context_alignment,
+            alignment_layer=alignment_layer,
+            alignment_heads=alignment_heads,
+            return_all_hiddens=return_all_hiddens,
+            return_encoder_out=return_encoder_out,
+            return_hf_dict=return_hf_dict,
+            return_all_attention_weights=return_all_attention_weights
+        )
+
+    def get_normalized_probs(
+        self,
+        net_output: Tuple[Tensor, Optional[Dict[str, List[Optional[Tensor]]]]],
+        log_probs: bool,
+        sample: Optional[Dict[str, Tensor]] = None,
+    ):
+        return self.active_executor.get_normalized_probs(self, net_output=net_output, log_probs=log_probs, sample=sample)
+
     def upgrade_state_dict_named(self, state_dict, name):
         super().upgrade_state_dict_named(state_dict, name)
+
         # remove outdated params for backward compatibility when loading old checkpoints
         del_keys = ["decoder.output_projection.weight"]
         if not self.cfg.use_self_attn_bias:
@@ -314,6 +466,13 @@ class GeneralistModel(FairseqEncoderDecoderModel):
                 logger.info(f'remove {k} from old ckpt.')
                 del state_dict[k]
 
+        # detect the missing params in state_dict of checkpoints, and complete them from model
+        prefix = name + "." if name != "" else ""
+        for param_name, param_tensor in self.state_dict().items():
+            if (prefix + param_name) not in state_dict:
+                state_dict[prefix + param_name] = self.state_dict()[param_name]
+                logger.info('not found in checkpoint: %s%s' % (prefix, param_name))
+
         # extend embed_tokens if the loaded dict is smaller than the current model.
         loaded_dict_size = state_dict["encoder.adaptor.embed_tokens.weight"].size(0)
         if loaded_dict_size < len(self.encoder.dictionary):
@@ -333,6 +492,8 @@ class GeneralistModel(FairseqEncoderDecoderModel):
             )
 
     def update_embedding(self, state):
+        if "global_dict_indices" not in state:
+            return
         assert "global_dict_indices" in state, 'Cannot find global_dict in restored ckpt!'
         loaded_global_dict = state["global_dict_indices"]
         tokens_sorted = sorted(loaded_global_dict.items(), key=lambda x: x[1])
@@ -351,6 +512,46 @@ class GeneralistModel(FairseqEncoderDecoderModel):
         sample = self.encoder.adaptor.update_sample(sample)
         sample = self.decoder.adaptor.update_sample(sample)
         return sample
+
+    def forward_decoder(self, prev_output_tokens, **kwargs):
+        return self.active_executor.forward_decoder(self, prev_output_tokens, **kwargs)
+
+    def extract_features(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
+        """
+        Similar to *forward* but only return features.
+
+        Returns:
+            tuple:
+                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
+                - a dictionary with any model-specific outputs
+        """
+        # TODO: Consider active_executor
+        # TODO: I didn't find any call to this method in the project. Consider remove it.
+        decoder: BaseDecoder = self.decoder
+        encoder_out = self.encoder(src_tokens, src_lengths=src_lengths, **kwargs)
+        features = decoder.extract_features(
+            prev_output_tokens, encoder_out=encoder_out, **kwargs
+        )
+        return features
+
+    def output_layer(self, features, **kwargs):
+        # TODO: Consider active_executor
+        # TODO: I didn't find any call to this method in the project. Consider remove it.
+        decoder: BaseDecoder = self.decoder
+        """Project features to the default output size (typically vocabulary size)."""
+        return decoder.output_layer(features, **kwargs)
+
+    def max_positions(self):
+        """Maximum length supported by the model."""
+        # TODO: Consider active_executor
+        decoder: BaseDecoder = self.decoder
+        return (self.encoder.max_positions(), decoder.max_positions())
+
+    def max_decoder_positions(self):
+        """Maximum length supported by the decoder."""
+        # TODO: Consider active_executor
+        decoder: BaseDecoder = self.decoder
+        return decoder.max_positions()
 
 
 def ofa_arch_base(cfg: GeneralistModelConfig):

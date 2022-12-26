@@ -17,7 +17,7 @@ Default Template
 
 .. code-block:: console
 
-	[IMAGE:img] <BOS> what does the image describe? <EOS> -> <BOS> [TEXT:cap] <EOS>
+	[IMAGE:img] what does the image describe? -> [TEXT:cap]
 
 
 Usage
@@ -25,7 +25,7 @@ Usage
 
 .. code-block::
 
-    >>> template = '[IMAGE:img] <BOS> what does the image describe? <EOS> -> <BOS> [TEXT:cap] <EOS>'
+    >>> template = '[IMAGE:img] what does the image describe? -> [TEXT:cap]'
     >>> data = {'img': "https://www.2008php.com/2014_Website_appreciate/2015-06-22/20150622131649.jpg"}
     >>> output = model.inference(template, data=data)
     >>> print(output)
@@ -108,7 +108,7 @@ Default Template
 ^^^^^^^^^^^^^^^^
 .. code-block:: console
 
-		[IMAGE:image] <BOS> [TEXT:question] <EOS> -> <BOS> [TEXT:answer,closed_set] <EOS>
+		[IMAGE:image] [TEXT:question] -> [TEXT:answer,closed_set]
 
 
 .. _snlive:
