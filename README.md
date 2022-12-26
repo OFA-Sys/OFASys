@@ -204,7 +204,7 @@ data = [
      {'src': 'Show the name and the release year of the song by the youngest singer.', 'database': database}
  ]
 output = model.inference(instruction, data=data)
-print('\n'.join(o.text for o in output))]
+print('\n'.join([o.text for o in output]))
 # "select name, country, age from singer order by age desc"
 # "select distinct country from singer where age > 20"
 # "select song_name, song_release_year from singer order by age limit 1"
