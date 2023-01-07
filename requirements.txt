@@ -31,7 +31,7 @@ rapidfuzz
 pillow
 opencv-python
 timm>=0.5.0
-http://ofasys.oss-cn-zhangjiakou.aliyuncs.com/dependency/clip-1.0-py3-none-any.whl
+git+https://github.com/openai/clip.git
 diffusers
 matplotlib
 
